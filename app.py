@@ -197,7 +197,7 @@ def excel_download_button(df, label="Download Excel"):
     )
 
 # ---------------- APP LAYOUT START ----------------
-st.image("nbd.png", width=160)
+st.image("nbd.PNG", width=160)
 st.title("🧬 Non-B DNA Motif Finder")
 st.write(
     "Upload a FASTA file or paste your sequence below. "
