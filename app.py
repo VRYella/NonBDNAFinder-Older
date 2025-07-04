@@ -5,43 +5,34 @@ import re
 import io
 import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
-
+# --- MOTIFS DEFINITION (regexes, names, classes) ---
 MOTIFS = [
-    # G-quadruplex (canonical: 4 G-runs separated by 1-12 nt)
+    # Canonical G4: 4 G-runs, 3 loops of 1–12 nt
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){3}G{3,}", "G-Quadruplex"),
-    # i-Motif (C-rich counterpart, similar loop size)
     ("Quadruplex", r"(C{3,}[ATGC]{1,12}){3}C{3,}", "i-Motif"),
-    # Bipartite G-quadruplex (stricter: 2 G4 blocks separated by up to 100nt, both G4s)
+    # Bipartite G4: Two G4s separated by up to 100 nt
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(G{3,}[ATGC]{1,12}){3}G{3,}", "Bipartite_G-Quadruplex"),
-    # G-triplex (3 G runs, 1–12nt loops)
+    # G-triplex: 3 G runs with loops (1–12 nt)
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){2}G{3,}", "G-Triplex"),
-    # Z-DNA (alternating purine/pyrimidine, 6+ repeats, e.g. GC, CG, GT, TG, AC, CA)
     ("Z-DNA", r"((GC|CG|GT|TG|AC|CA){6,})", "Z-DNA"),
-    # Triplex-forming mirror repeat (H-DNA, purine or pyrimidine arms, 10+nt each, ≤100nt loop)
     ("Triplex", r"([AG]{10,}|[CT]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "H-DNA"),
-    # Sticky DNA (GAA/TTC repeats, 5+ units)
     ("Triplex", r"(GAA){5,}|(TTC){5,}", "Sticky_DNA"),
-    # Direct Repeat (slipped DNA)
     ("Direct Repeat", r"([ATGC]{10,25})([ATGC]{0,10})\1", "Slipped_DNA"),
-    # Inverted Repeat (cruciform)
     ("Inverted Repeat", r"([ATGC]{10,})([ATGC]{0,100})\1", "Cruciform_DNA"),
-    # Hairpin (6+ nt stem, loop up to 100 nt)
     ("Hairpin", r"([ATGC]{6,})([ATGC]{0,100})\1", "DNA_Hairpin"),
     ("Hairpin", r"(C{3,10})([ATGC]{0,100})\1", "i-Motif_Hairpin"),
     ("Hairpin", r"(G{3,10})([ATGC]{0,100})\1", "G-Hairpin"),
     ("Hairpin", r"(C{3,10})([ATGC]{0,100})\1", "C-Hairpin"),
     ("Hairpin", r"([ATGC]{6,10})([ATGC]{0,100})\1([ATGC]{0,100})\1", "Hairpin-Loop-Duplex"),
-    # Bent DNA (A4-6 or T4-6 phased by 7–11 nt, at least three phased tracts)
+    # Bent DNA: (A/T)4-6, 7-11 nt spacer, at least 3 tracts
     ("Bent DNA", r"(A{4,6}|T{4,6})([ATGC]{7,11})(A{4,6}|T{4,6})([ATGC]{7,11})(A{4,6}|T{4,6})", "Bent_DNA"),
-    # Quadruplex-triplex hybrid
+    # Hybrid motifs
     ("Quadruplex-Triplex Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}([AG]{10,}|[CT]{10,})", "Quadruplex-Triplex_Hybrid"),
-    # Cruciform-Triplex junction
     ("Cruciform-Triplex Junction", r"([ATGC]{10,})([ATGC]{0,100})([ATGC]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "Cruciform-Triplex_Junctions"),
-    # G4/i-motif hybrid (G4 + i-motif in proximity, up to 100nt apart)
     ("G-Quadruplex_i-Motif_Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(C{3,}[ATGC]{1,12}){3}C{3,}", "G-Quadruplex_i-Motif_Hybrid"),
 ]
 
+# --- EXAMPLE FASTA STRING ---
 EXAMPLE_FASTA = """>Example
 ATCGATCGATCGAAAATTTTATTTAAATTTAAATTTGGGTTAGGGTTAGGGTTAGGGCCCCCTCCCCCTCCCCCTCCCC
 ATCGATCGCGCGCGCGATCGCACACACACAGCTGCTGCTGCTTGGGAAAGGGGAAGGGTTAGGGAAAGGGGTTT
@@ -49,6 +40,7 @@ GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
 GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 """
 
+# --- UTILS ---
 def parse_fasta(fasta_str: str) -> str:
     lines = fasta_str.strip().splitlines()
     seq = [line.strip() for line in lines if not line.startswith(">")]
@@ -92,7 +84,6 @@ def motif_propensity(name: str, seq: str) -> str:
         seq = seq.replace("G", "C")
         return f"{-g4hunter_score(seq):.2f}"
     if name == "G-Triplex":
-        # Chen et al. NAR 2018: Triplex is less stable than G4 (~0.7x)
         score = g4hunter_score(seq)
         return f"{score * 0.7:.2f}"
     if name == "Z-DNA":
@@ -123,7 +114,7 @@ def motif_propensity(name: str, seq: str) -> str:
     if name == "Bent_DNA":
         tracts = re.findall(r"A{4,6}|T{4,6}", seq)
         return f"{max([len(t) for t in tracts])}bp-tract" if tracts else "NA"
-    # For other/hybrid/multi-conformational cases
+    # For hybrid/multiconf
     return "NA"
 
 def find_motifs(seq: str) -> list:
@@ -193,21 +184,24 @@ def csv_download_button(df, label="Download CSV"):
     )
 
 def excel_download_button(df, label="Download Excel"):
+    # Handles large files robustly, avoids 'zipfile' bug
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df.to_excel(writer, index=False)
     output.seek(0)
     st.download_button(
         label=label,
-        data=output,
+        data=output.getvalue(),
         file_name="motifs.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
+# ---------------- APP LAYOUT START ----------------
+st.image("nbd.png", width=160)
 st.title("🧬 Non-B DNA Motif Finder")
 st.write(
     "Upload a FASTA file or paste your sequence below. "
-    "Supports single or multiline FASTA. Example sequence provided."
+    "Supports single or multiline FASTA. Example sequence provided below."
 )
 
 col1, col2 = st.columns(2)
