@@ -4,6 +4,7 @@ import numpy as np
 import re
 import io
 import matplotlib.pyplot as plt
+import seaborn as sns
 from datetime import datetime
 
 # --- MOTIFS DEFINITION (regexes, names, classes, explanations) ---
@@ -46,7 +47,7 @@ EXAMPLE_FASTA = """>Example
 ATCGATCGATCGAAAATTTTATTTAAATTTAAATTTGGGTTAGGGTTAGGGTTAGGGCCCCCTCCCCCTCCCCCTCCCC
 ATCGATCGCGCGCGCGATCGCACACACACAGCTGCTGCTGCTTGGGAAAGGGGAAGGGTTAGGGAAAGGGGTTT
 GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
-GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
+GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 """
 
 # --- UTILS ---
@@ -165,31 +166,6 @@ def find_multiconformational(results: list, max_gap=10) -> list:
             })
     return mcrs
 
-def visualize_motifs(results: list, seq_len: int):
-    if not results:
-        st.info("No motifs to visualize.")
-        return
-    plt.figure(figsize=(min(18, 2 + seq_len/800), 6))
-    motif_types = sorted(set(r['Subtype'] for r in results))
-    type2y = {cl: i+1 for i, cl in enumerate(motif_types)}
-    colormap = plt.colormaps['tab20']
-    for r in results:
-        y = type2y[r['Subtype']]
-        plt.plot([r['Start'], r['End']], [y, y], lw=12,
-                 color=colormap((y-1) % 20),
-                 label=r['Subtype'] if r['Start']==min(rr['Start'] for rr in results if rr['Subtype']==r['Subtype']) else "")
-    plt.yticks(list(type2y.values()), list(type2y.keys()))
-    plt.xlabel("Sequence Position (bp)")
-    plt.ylabel("Motif Type")
-    plt.title("Non-B DNA Motif Locations")
-    plt.tight_layout()
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    if by_label:
-        plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
-    st.pyplot(plt)
-    plt.close()
-
 def csv_download_button(df, label="Download CSV"):
     nowstr = datetime.now().strftime("%Y%m%d-%H%M%S")
     st.download_button(
@@ -217,26 +193,19 @@ def excel_download_button(df, label="Download Excel"):
     )
 
 # ---------------- APP LAYOUT START ----------------
+
+st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
+
+# Display PNG logo at the top, centered (nbd.PNG must be in the same directory as this script)
 st.markdown(
     """
-    <style>
-    .nbdna-header {
-        width: 100%;
-        display: flex;
-        justify-content: center;
-        margin-bottom: -30px;
-    }
-    .nbdna-header img {
-        max-width: 100%;
-        height: auto;
-        margin-left: auto;
-        margin-right: auto;
-    }
-    </style>
+    <div style="display:flex; justify-content:center; align-items:center; margin-bottom:-30px;">
+        <img src="nbd.PNG" alt="Non-B DNA Finder" style="width:230px; max-width:100%; height:auto;">
+    </div>
     """,
-    unsafe_allow_html=True)
+    unsafe_allow_html=True
+)
 
-st.markdown('<div class="nbdna-header"><img src="app/static/nbdna.PNG" alt="Non-B DNA Finder"></div>', unsafe_allow_html=True)
 st.title("🧬 Non-B DNA Motif Finder")
 st.caption("Detects and visualizes non-B DNA motifs, including G-quadruplexes, triplexes, Z-DNA, and more.")
 
@@ -297,19 +266,54 @@ if not results:
     st.stop()
 
 df = pd.DataFrame(all_results)
-st.markdown("### 🧬 Predicted Non-B DNA Motifs")
-st.dataframe(df, use_container_width=True, hide_index=True)
 
-with st.expander("Motif Class Summary", expanded=True):
-    motif_counts = df["Subtype"].value_counts().reset_index()
-    motif_counts.columns = ["Motif Type", "Count"]
-    st.dataframe(motif_counts, use_container_width=True, hide_index=True)
+# ----------------- SIDE BY SIDE VISUALIZATION --------------------
+col_tbl, col_vis = st.columns([1, 1.1])
 
-col_csv, col_excel = st.columns(2)
-with col_csv:
-    csv_download_button(df, "Download Results as CSV")
-with col_excel:
-    excel_download_button(df, "Download Results as Excel")
+with col_tbl:
+    st.markdown("### 🧬 Predicted Non-B DNA Motifs")
+    # Colorful table
+    st.dataframe(df.style.background_gradient(cmap="rainbow"), use_container_width=True, hide_index=True)
 
-st.markdown("### 📊 Motif Visualization")
-visualize_motifs(results, len(seq))
+    with st.expander("Motif Class Summary", expanded=True):
+        motif_counts = df["Subtype"].value_counts().reset_index()
+        motif_counts.columns = ["Motif Type", "Count"]
+        st.dataframe(
+            motif_counts.style.background_gradient(cmap="cool"), 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+    col_csv, col_excel = st.columns(2)
+    with col_csv:
+        csv_download_button(df, "Download Results as CSV")
+    with col_excel:
+        excel_download_button(df, "Download Results as Excel")
+
+with col_vis:
+    st.markdown("### 📊 Motif Visualization")
+    # Colorful motif visualization using seaborn color palette
+    if results:
+        plt.figure(figsize=(min(18, 2 + len(seq)/800), 6))
+        motif_types = sorted(set(r['Subtype'] for r in results))
+        type2y = {cl: i+1 for i, cl in enumerate(motif_types)}
+        palette = sns.color_palette("hsv", len(motif_types))
+        subtype2color = {subtype: palette[i] for i, subtype in enumerate(motif_types)}
+        for r in results:
+            y = type2y[r['Subtype']]
+            plt.plot([r['Start'], r['End']], [y, y], lw=14,
+                     color=subtype2color[r['Subtype']],
+                     label=r['Subtype'] if r['Start'] == min(rr['Start'] for rr in results if rr['Subtype'] == r['Subtype']) else "")
+        plt.yticks(list(type2y.values()), list(type2y.keys()))
+        plt.xlabel("Sequence Position (bp)")
+        plt.ylabel("Motif Type")
+        plt.title("Non-B DNA Motif Locations", fontsize=16, color='#432371')
+        plt.tight_layout()
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        if by_label:
+            plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
+        st.pyplot(plt)
+        plt.close()
+    else:
+        st.info("No motifs to visualize.")
