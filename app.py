@@ -6,33 +6,47 @@ import io
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-# --- MOTIFS DEFINITION (regexes, names, classes) ---
+# --- MOTIFS DEFINITION (regexes, names, classes, explanations) ---
+MOTIF_INFO = [
+    ("G-Quadruplex", "A structure formed by sequences rich in guanine, comprising four runs of three or more Gs, separated by loops of 1-12 nucleotides."),
+    ("i-Motif", "Cytosine-rich sequences forming quadruplexes under acidic conditions."),
+    ("Bipartite_G-Quadruplex", "Two tandem G-quadruplexes separated by up to 100 nt."),
+    ("G-Triplex", "Three runs of guanines, potentially forming a triple-stranded structure."),
+    ("Multimeric_G-Quadruplex", "Multiple G-quadruplexes in tandem, separated by short linkers (up to 50 nt)."),
+    ("Z-DNA", "Left-handed helix formed by alternating purine-pyrimidine repeats."),
+    ("H-DNA", "Triplex-forming DNA with mirror repeats."),
+    ("Sticky_DNA", "Long runs of GAA or TTC, forming sticky triplex structures."),
+    ("Slipped_DNA", "Direct repeats, which can misalign and slip during replication."),
+    ("Cruciform_DNA", "Inverted repeats that may form cruciform/hairpin structures."),
+    ("Bent_DNA", "A-tract or T-tract periodicity causing DNA bending."),
+    ("Quadruplex-Triplex_Hybrid", "Regions with potential to form both G4 and triplex structures."),
+    ("Cruciform-Triplex_Junctions", "Junction regions with both cruciform and triplex potential."),
+    ("G-Quadruplex_i-Motif_Hybrid", "Close proximity of G4 and i-motif forming sequences."),
+]
+
 MOTIFS = [
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){3}G{3,}", "G-Quadruplex"),
     ("Quadruplex", r"(C{3,}[ATGC]{1,12}){3}C{3,}", "i-Motif"),
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(G{3,}[ATGC]{1,12}){3}G{3,}", "Bipartite_G-Quadruplex"),
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){2}G{3,}", "G-Triplex"),
+    # Multimeric G4: two or more G4s separated by up to 50 nt
+    ("Quadruplex", r"((G{3,}[ATGC]{1,12}){3}G{3,}([ATGC]{1,50}(G{3,}[ATGC]{1,12}){3}G{3,})+)", "Multimeric_G-Quadruplex"),
     ("Z-DNA", r"((GC|CG|GT|TG|AC|CA){6,})", "Z-DNA"),
     ("Triplex", r"([AG]{10,}|[CT]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "H-DNA"),
     ("Triplex", r"(GAA){5,}|(TTC){5,}", "Sticky_DNA"),
     ("Direct Repeat", r"([ATGC]{10,25})([ATGC]{0,10})\1", "Slipped_DNA"),
     ("Inverted Repeat", r"([ATGC]{10,})([ATGC]{0,100})\1", "Cruciform_DNA"),
-    ("Hairpin", r"([ATGC]{6,})([ATGC]{0,100})\1", "DNA_Hairpin"),
-    ("Hairpin", r"(C{3,10})([ATGC]{0,100})\1", "i-Motif_Hairpin"),
-    ("Hairpin", r"(G{3,10})([ATGC]{0,100})\1", "G-Hairpin"),
-    ("Hairpin", r"([ATGC]{6,10})([ATGC]{0,100})\1([ATGC]{0,100})\1", "Hairpin-Loop-Duplex"),
     ("Bent DNA", r"(A{4,6}|T{4,6})([ATGC]{7,11})(A{4,6}|T{4,6})([ATGC]{7,11})(A{4,6}|T{4,6})", "Bent_DNA"),
     ("Quadruplex-Triplex Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}([AG]{10,}|[CT]{10,})", "Quadruplex-Triplex_Hybrid"),
     ("Cruciform-Triplex Junction", r"([ATGC]{10,})([ATGC]{0,100})([ATGC]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "Cruciform-Triplex_Junctions"),
     ("G-Quadruplex_i-Motif_Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(C{3,}[ATGC]{1,12}){3}C{3,}", "G-Quadruplex_i-Motif_Hybrid"),
 ]
 
-# --- EXAMPLE FASTA STRING ---
 EXAMPLE_FASTA = """>Example
 ATCGATCGATCGAAAATTTTATTTAAATTTAAATTTGGGTTAGGGTTAGGGTTAGGGCCCCCTCCCCCTCCCCCTCCCC
 ATCGATCGCGCGCGCGATCGCACACACACAGCTGCTGCTGCTTGGGAAAGGGGAAGGGTTAGGGAAAGGGGTTT
 GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
-GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
+GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 """
 
 # --- UTILS ---
@@ -81,6 +95,12 @@ def motif_propensity(name: str, seq: str) -> str:
     if name == "G-Triplex":
         score = g4hunter_score(seq)
         return f"{score * 0.7:.2f}"
+    if name == "Multimeric_G-Quadruplex":
+        # Average the individual G4 scores in the match
+        g4s = re.findall(r"(G{3,}[ATGC]{1,12}){3}G{3,}", seq)
+        if g4s:
+            return f"{np.mean([g4hunter_score(g) for g in g4s]):.2f}"
+        return "NA"
     if name == "Z-DNA":
         n = len(re.findall(r"(GC|CG|GT|TG|AC|CA)", seq))
         return f"{n:d}" if n > 0 else "NA"
@@ -94,11 +114,6 @@ def motif_propensity(name: str, seq: str) -> str:
         if blocks:
             score = np.mean([g4hunter_score(b) for b in blocks])
             return f"{score:.2f}"
-        return "NA"
-    if name in ["DNA_Hairpin", "G-Hairpin", "i-Motif_Hairpin"]:
-        stems = re.findall(r"([ATGC]{6,})", seq)
-        if stems:
-            return f"{max([len(s) for s in stems])}bp-stem"
         return "NA"
     if name == "Slipped_DNA":
         dr = re.findall(r"([ATGC]{10,25})", seq)
@@ -151,18 +166,21 @@ def find_multiconformational(results: list, max_gap=10) -> list:
     return mcrs
 
 def visualize_motifs(results: list, seq_len: int):
-    plt.figure(figsize=(15, 6))
-    motif_types = sorted(set(r['Motif Class'] for r in results))
-    class2y = {cl: i+1 for i, cl in enumerate(motif_types)}
+    if not results:
+        st.info("No motifs to visualize.")
+        return
+    plt.figure(figsize=(min(18, 2 + seq_len/800), 6))
+    motif_types = sorted(set(r['Subtype'] for r in results))
+    type2y = {cl: i+1 for i, cl in enumerate(motif_types)}
     colormap = plt.colormaps['tab20']
     for r in results:
-        y = class2y[r['Motif Class']]
-        plt.plot([r['Start'], r['End']], [y, y], lw=10,
+        y = type2y[r['Subtype']]
+        plt.plot([r['Start'], r['End']], [y, y], lw=12,
                  color=colormap((y-1) % 20),
-                 label=r['Motif Class'] if r['Start']==min(rr['Start'] for rr in results if rr['Motif Class']==r['Motif Class']) else "")
-    plt.yticks(list(class2y.values()), list(class2y.keys()))
+                 label=r['Subtype'] if r['Start']==min(rr['Start'] for rr in results if rr['Subtype']==r['Subtype']) else "")
+    plt.yticks(list(type2y.values()), list(type2y.keys()))
     plt.xlabel("Sequence Position (bp)")
-    plt.ylabel("Motif Class")
+    plt.ylabel("Motif Type")
     plt.title("Non-B DNA Motif Locations")
     plt.tight_layout()
     handles, labels = plt.gca().get_legend_handles_labels()
@@ -199,20 +217,54 @@ def excel_download_button(df, label="Download Excel"):
     )
 
 # ---------------- APP LAYOUT START ----------------
-st.image("nbd.PNG", width=1800)
-st.title(" Non-B DNA Motif Finder ")
+st.markdown(
+    """
+    <style>
+    .nbdna-header {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        margin-bottom: -30px;
+    }
+    .nbdna-header img {
+        max-width: 100%;
+        height: auto;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True)
+
+st.markdown('<div class="nbdna-header"><img src="app/static/nbdna.PNG" alt="Non-B DNA Finder"></div>', unsafe_allow_html=True)
+st.title("🧬 Non-B DNA Motif Finder")
+st.caption("Detects and visualizes non-B DNA motifs, including G-quadruplexes, triplexes, Z-DNA, and more.")
+
+with st.expander("ℹ️ Motif Explanations"):
+    for name, expl in MOTIF_INFO:
+        st.markdown(f"**{name}**: {expl}")
+
 st.write(
-    "Upload a FASTA file or paste your sequence below. "
-    "Supports single or multiline FASTA. Example sequence provided below."
+    "Upload a FASTA file or paste your sequence below. Supports single or multiline FASTA. "
+    "Click **Run Analysis** to begin."
 )
 
+# --- USER INPUT AREA ---
 col1, col2 = st.columns(2)
 with col1:
     fasta_file = st.file_uploader("Upload FASTA file", type=["fa", "fasta", "txt"])
 with col2:
     if st.button("Use Example Sequence"):
         st.session_state["input_seq"] = EXAMPLE_FASTA
-    input_seq = st.text_area("Paste sequence in FASTA format", st.session_state.get("input_seq", EXAMPLE_FASTA), height=150)
+    input_seq = st.text_area("Paste sequence in FASTA format", st.session_state.get("input_seq", EXAMPLE_FASTA), height=120)
+
+# --- RUN & STOP BUTTONS ---
+run = st.button("▶️ Run Analysis", key="run")
+stop = st.button("🛑 Stop", key="stop")
+
+if stop:
+    st.warning("Analysis stopped by user.")
+    st.stop()
 
 seq = None
 if "input_seq" in st.session_state and st.session_state["input_seq"] == EXAMPLE_FASTA:
@@ -225,7 +277,9 @@ elif fasta_file is not None:
         st.stop()
 elif input_seq.strip():
     seq = parse_fasta(input_seq.strip())
-else:
+
+if not run:
+    st.info("Load or paste a sequence, then click 'Run Analysis'.")
     st.stop()
 
 if not seq or not re.match("^[ATGC]+$", seq):
@@ -247,8 +301,8 @@ st.markdown("### 🧬 Predicted Non-B DNA Motifs")
 st.dataframe(df, use_container_width=True, hide_index=True)
 
 with st.expander("Motif Class Summary", expanded=True):
-    motif_counts = df["Motif Class"].value_counts().reset_index()
-    motif_counts.columns = ["Motif Class", "Count"]
+    motif_counts = df["Subtype"].value_counts().reset_index()
+    motif_counts.columns = ["Motif Type", "Count"]
     st.dataframe(motif_counts, use_container_width=True, hide_index=True)
 
 col_csv, col_excel = st.columns(2)
