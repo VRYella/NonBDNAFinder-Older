@@ -6,7 +6,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from io import StringIO
 
-# Streamlit needs this for matplotlib to not crash
 import matplotlib
 matplotlib.use("Agg")
 
@@ -54,18 +53,13 @@ def gc_content(seq: str) -> float:
     return 100.0 * (seq.count("G") + seq.count("C")) / max(1, len(seq))
 
 def propensity_score(name: str, seq: str) -> float:
-    """
-    Assigns scientific propensities to motifs based on literature.
-    For motifs without established literature values, returns 'NA'.
-    """
-    # G-Quadruplex and i-Motif (G4Hunter, Abou Assi 2018)
     if name in ["G-Quadruplex", "DNA-RNA_Hybrid_G-Quadruplex"]:
         vals = []
         run = 0
         for base in seq:
             if base == 'G':
                 run += 1
-                vals.append(min(run, 4))  # Score 1-4 for 1-4+ consecutive G
+                vals.append(min(run, 4))
             else:
                 run = 0
                 vals.append(0)
@@ -84,11 +78,9 @@ def propensity_score(name: str, seq: str) -> float:
         prop = np.mean(vals) if vals else 0
         return round(prop, 2)
     if name == "G-Triplex":
-        # Lower than G4: Chen et al., NAR 2018 (generally ~60% of G4)
         g4_val = propensity_score("G-Quadruplex", seq)
         return round(g4_val * 0.6, 2)
     if name == "Bipartite_G-Quadruplex":
-        # Two G4s separated by linker; propensity is minimum of the two, if both present
         matches = re.findall(r"(G{3,}[ATGC]{1,12}G{3,})", seq)
         props = [propensity_score("G-Quadruplex", m) for m in matches]
         return round(min(props) if props else 0, 2)
@@ -97,35 +89,27 @@ def propensity_score(name: str, seq: str) -> float:
         props = [propensity_score("G-Quadruplex", m) for m in matches]
         return round(np.mean(props) if props else 0, 2)
     if name == "Sticky_DNA":
-        # GAA/TTC repeats, moderate propensity (Wells 1988)
         count = len(re.findall(r"(GAA|TTC)", seq))
         return round(min(1.0, 0.2 + 0.05 * count), 2)
     if name == "H-DNA":
-        # Homopurine/homopyrimidine runs (Buske 2012)
         matches = re.findall(r"[AG]{10,}|[CT]{10,}", seq)
         prop = 0.3 + 0.02 * min([len(m) for m in matches]) if matches else 0.3
         return round(min(1.0, prop), 2)
     if name == "Z-DNA":
-        # From ZHunt (Herbert 1999): >0.6 = high, here crude estimator
         repeats = len(re.findall(r"(GC|CG|GT|TG|AC|CA)", seq))
         prop = 0.2 + 0.04 * repeats
         return round(min(1.0, prop), 2)
     if name in ["DNA_Hairpin", "i-Motif_Hairpin", "G-Hairpin", "C-Hairpin"]:
-        # No universal estimator; suggest NA
         return "NA"
     if name == "Bent_DNA":
-        # Bent/curved DNA: Literature does not provide a universal score (Marini 1982)
         return "NA"
     if name in ["Slipped_DNA", "Cruciform_DNA"]:
-        # Repeat instability, cruciform: NA
         return "NA"
     if name in ["Quadruplex-Triplex_Hybrid", "Cruciform-Triplex_Junctions", "G-Quadruplex_i-Motif_Hybrid"]:
-        # No universal estimator, complex/hybrid
         return "NA"
     return "NA"
 
 def parse_fasta(fasta_text: str) -> str:
-    # Returns the first sequence from a FASTA string (multiline supported)
     seq = ""
     for line in fasta_text.splitlines():
         line = line.strip()
@@ -143,7 +127,7 @@ def find_motifs_all(seq: str) -> list:
             found.append({
                 "class": motif_class,
                 "name": name,
-                "start": start+1,   # 1-based for user
+                "start": start+1,
                 "end": end+1,
                 "length": end-start+1,
                 "propensity": propensity_score(name, region),
@@ -160,12 +144,14 @@ def print_longest_of_each_class(motifs: list):
     st.markdown("### Longest motif for each subclass")
     st.dataframe(longest[["class", "name", "start", "end", "length", "propensity", "gc_content", "wrapped"]],
                  use_container_width=True)
+    return longest
 
 def print_table(motifs: list):
     df = pd.DataFrame(motifs)
     st.markdown("### All predicted motifs")
     st.dataframe(df[["class", "name", "start", "end", "length", "propensity", "gc_content", "wrapped"]],
                  use_container_width=True)
+    return df
 
 def visualize_motifs(motifs: list, seq_len: int):
     st.markdown("### Motif visualization")
@@ -194,8 +180,46 @@ def visualize_motifs(motifs: list, seq_len: int):
     plt.tight_layout()
     st.pyplot(plt.gcf())
 
+def motif_summary(motifs: list, seq_len: int):
+    df = pd.DataFrame(motifs)
+    total_motifs = len(df)
+    motif_class_counts = df['class'].value_counts().to_dict()
+    motif_cov = 0
+    covered = set()
+    for _, row in df.iterrows():
+        covered.update(range(row['start'], row['end']+1))
+    motif_cov = len(covered)
+    st.markdown("### Motif Summary")
+    st.write(f"**Total motifs detected:** {total_motifs}")
+    st.write(f"**Motif class counts:** {motif_class_counts}")
+    st.write(f"**Total coverage:** {motif_cov} bp ({motif_cov*100/seq_len:.1f}% of sequence)")
+
+    # Pie chart for motif class frequency
+    if motif_class_counts:
+        chart_df = pd.DataFrame(list(motif_class_counts.items()), columns=["Motif Class", "Count"])
+        st.pyplot(chart_df.set_index("Motif Class").plot.pie(y="Count", legend=False, autopct='%1.0f%%', figsize=(4,4)).get_figure())
+
+def csv_download_button(df, name):
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label=f"Download {name} as CSV",
+        data=csv,
+        file_name=f"{name}.csv",
+        mime="text/csv"
+    )
+
+def excel_download_button(df, name):
+    output = StringIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    st.download_button(
+        label=f"Download {name} as Excel",
+        data=output.getvalue(),
+        file_name=f"{name}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
 st.title("Non-B DNA Motif Finder")
-st.write("Paste or upload a DNA sequence in FASTA format. This tool will predict all scientifically described non-B DNA motifs, their location, length, and non-B propensity where possible.")
+st.write("Paste or upload a DNA sequence in FASTA format. This tool predicts all scientifically described non-B DNA motifs, their location, length, and non-B propensity (where possible). Download results as CSV or Excel.")
 
 col1, col2 = st.columns([1,1])
 with col1:
@@ -230,6 +254,12 @@ motifs = find_motifs_all(seq)
 if not motifs:
     st.warning("No non-B DNA motifs found in the input sequence.")
 else:
-    print_longest_of_each_class(motifs)
-    print_table(motifs)
+    summary_placeholder = st.empty()
+    longest = print_longest_of_each_class(motifs)
+    df = print_table(motifs)
+    csv_download_button(df, "all_motifs")
+    excel_download_button(df, "all_motifs")
+    csv_download_button(longest, "longest_per_class")
+    excel_download_button(longest, "longest_per_class")
+    motif_summary(motifs, len(seq))
     visualize_motifs(motifs, len(seq))
