@@ -4,15 +4,13 @@ import numpy as np
 import re
 import io
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 # --- MOTIFS DEFINITION (regexes, names, classes) ---
 MOTIFS = [
-    # Canonical G4: 4 G-runs, 3 loops of 1–12 nt
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){3}G{3,}", "G-Quadruplex"),
     ("Quadruplex", r"(C{3,}[ATGC]{1,12}){3}C{3,}", "i-Motif"),
-    # Bipartite G4: Two G4s separated by up to 100 nt
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(G{3,}[ATGC]{1,12}){3}G{3,}", "Bipartite_G-Quadruplex"),
-    # G-triplex: 3 G runs with loops (1–12 nt)
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){2}G{3,}", "G-Triplex"),
     ("Z-DNA", r"((GC|CG|GT|TG|AC|CA){6,})", "Z-DNA"),
     ("Triplex", r"([AG]{10,}|[CT]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "H-DNA"),
@@ -22,11 +20,8 @@ MOTIFS = [
     ("Hairpin", r"([ATGC]{6,})([ATGC]{0,100})\1", "DNA_Hairpin"),
     ("Hairpin", r"(C{3,10})([ATGC]{0,100})\1", "i-Motif_Hairpin"),
     ("Hairpin", r"(G{3,10})([ATGC]{0,100})\1", "G-Hairpin"),
-    ("Hairpin", r"(C{3,10})([ATGC]{0,100})\1", "C-Hairpin"),
     ("Hairpin", r"([ATGC]{6,10})([ATGC]{0,100})\1([ATGC]{0,100})\1", "Hairpin-Loop-Duplex"),
-    # Bent DNA: (A/T)4-6, 7-11 nt spacer, at least 3 tracts
     ("Bent DNA", r"(A{4,6}|T{4,6})([ATGC]{7,11})(A{4,6}|T{4,6})([ATGC]{7,11})(A{4,6}|T{4,6})", "Bent_DNA"),
-    # Hybrid motifs
     ("Quadruplex-Triplex Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}([AG]{10,}|[CT]{10,})", "Quadruplex-Triplex_Hybrid"),
     ("Cruciform-Triplex Junction", r"([ATGC]{10,})([ATGC]{0,100})([ATGC]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "Cruciform-Triplex_Junctions"),
     ("G-Quadruplex_i-Motif_Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(C{3,}[ATGC]{1,12}){3}C{3,}", "G-Quadruplex_i-Motif_Hybrid"),
@@ -37,14 +32,14 @@ EXAMPLE_FASTA = """>Example
 ATCGATCGATCGAAAATTTTATTTAAATTTAAATTTGGGTTAGGGTTAGGGTTAGGGCCCCCTCCCCCTCCCCCTCCCC
 ATCGATCGCGCGCGCGATCGCACACACACAGCTGCTGCTGCTTGGGAAAGGGGAAGGGTTAGGGAAAGGGGTTT
 GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
-GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
+GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 """
 
 # --- UTILS ---
 def parse_fasta(fasta_str: str) -> str:
     lines = fasta_str.strip().splitlines()
     seq = [line.strip() for line in lines if not line.startswith(">")]
-    return "".join(seq).upper().replace(" ", "")
+    return "".join(seq).upper().replace(" ", "").replace("U", "T")
 
 def gc_content(seq: str) -> float:
     seq = seq.upper()
@@ -100,7 +95,7 @@ def motif_propensity(name: str, seq: str) -> str:
             score = np.mean([g4hunter_score(b) for b in blocks])
             return f"{score:.2f}"
         return "NA"
-    if name in ["DNA_Hairpin", "G-Hairpin", "C-Hairpin", "i-Motif_Hairpin"]:
+    if name in ["DNA_Hairpin", "G-Hairpin", "i-Motif_Hairpin"]:
         stems = re.findall(r"([ATGC]{6,})", seq)
         if stems:
             return f"{max([len(s) for s in stems])}bp-stem"
@@ -114,7 +109,6 @@ def motif_propensity(name: str, seq: str) -> str:
     if name == "Bent_DNA":
         tracts = re.findall(r"A{4,6}|T{4,6}", seq)
         return f"{max([len(t) for t in tracts])}bp-tract" if tracts else "NA"
-    # For hybrid/multiconf
     return "NA"
 
 def find_motifs(seq: str) -> list:
@@ -135,6 +129,8 @@ def find_motifs(seq: str) -> list:
     return results
 
 def find_multiconformational(results: list, max_gap=10) -> list:
+    if not results:
+        return []
     df = pd.DataFrame(results)
     df = df.sort_values("Start")
     mcrs = []
@@ -174,25 +170,31 @@ def visualize_motifs(results: list, seq_len: int):
     if by_label:
         plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
     st.pyplot(plt)
+    plt.close()
 
 def csv_download_button(df, label="Download CSV"):
+    nowstr = datetime.now().strftime("%Y%m%d-%H%M%S")
     st.download_button(
         label=label,
         data=df.to_csv(index=False).encode('utf-8'),
-        file_name="motifs.csv",
+        file_name=f"motifs_{nowstr}.csv",
         mime="text/csv"
     )
 
 def excel_download_button(df, label="Download Excel"):
-    # Handles large files robustly, avoids 'zipfile' bug
+    nowstr = datetime.now().strftime("%Y%m%d-%H%M%S")
     output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False)
+    try:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False)
+    except ImportError:
+        st.error("openpyxl is required for Excel export. Please install it.")
+        return
     output.seek(0)
     st.download_button(
         label=label,
         data=output.getvalue(),
-        file_name="motifs.xlsx",
+        file_name=f"motifs_{nowstr}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -213,15 +215,21 @@ with col2:
     input_seq = st.text_area("Paste sequence in FASTA format", st.session_state.get("input_seq", EXAMPLE_FASTA), height=150)
 
 seq = None
-if fasta_file is not None:
-    seq = parse_fasta(fasta_file.read().decode("utf-8"))
+if "input_seq" in st.session_state and st.session_state["input_seq"] == EXAMPLE_FASTA:
+    seq = parse_fasta(EXAMPLE_FASTA)
+elif fasta_file is not None:
+    try:
+        seq = parse_fasta(fasta_file.read().decode("utf-8"))
+    except Exception:
+        st.error("File could not be decoded as UTF-8. Please upload a valid text-based FASTA file.")
+        st.stop()
 elif input_seq.strip():
     seq = parse_fasta(input_seq.strip())
 else:
     st.stop()
 
-if not seq or not re.match("^[ATGCUatgcu]+$", seq):
-    st.error("No valid DNA sequence detected. Please upload or paste a valid FASTA.")
+if not seq or not re.match("^[ATGC]+$", seq):
+    st.error("No valid DNA sequence detected. Please upload or paste a valid FASTA (A/T/G/C only).")
     st.stop()
 
 st.markdown(f"**Sequence length:** {len(seq):,} bp")
