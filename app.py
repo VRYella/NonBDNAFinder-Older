@@ -7,22 +7,22 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 
-# --- MOTIFS DEFINITION (regexes, names, classes, explanations) ---
+# --- MOTIFS, CLASSES, and EXPLANATIONS ---
 MOTIF_INFO = [
-    ("G-Quadruplex", "A structure formed by sequences rich in guanine, comprising four runs of three or more Gs, separated by loops of 1-12 nucleotides."),
-    ("i-Motif", "Cytosine-rich sequences forming quadruplexes under acidic conditions."),
-    ("Bipartite_G-Quadruplex", "Two tandem G-quadruplexes separated by up to 100 nt."),
-    ("G-Triplex", "Three runs of guanines, potentially forming a triple-stranded structure."),
-    ("Multimeric_G-Quadruplex", "Multiple G-quadruplexes in tandem, separated by short linkers (up to 50 nt)."),
-    ("Z-DNA", "Left-handed helix formed by alternating purine-pyrimidine repeats."),
-    ("H-DNA", "Triplex-forming DNA with mirror repeats."),
-    ("Sticky_DNA", "Long runs of GAA or TTC, forming sticky triplex structures."),
-    ("Slipped_DNA", "Direct repeats, which can misalign and slip during replication."),
-    ("Cruciform_DNA", "Inverted repeats that may form cruciform/hairpin structures."),
-    ("Bent_DNA", "A-tract or T-tract periodicity causing DNA bending."),
-    ("Quadruplex-Triplex_Hybrid", "Regions with potential to form both G4 and triplex structures."),
-    ("Cruciform-Triplex_Junctions", "Junction regions with both cruciform and triplex potential."),
-    ("G-Quadruplex_i-Motif_Hybrid", "Close proximity of G4 and i-motif forming sequences."),
+    ("G-Quadruplex", "Guanine-rich, four-stranded DNA structure, four runs of ≥3 Gs, loops of 1-12 nt."),
+    ("i-Motif", "Cytosine-rich quadruplex, forms at low pH."),
+    ("Bipartite_G-Quadruplex", "Two G4s separated by ≤100 nt."),
+    ("G-Triplex", "Three guanine runs, possible triple-stranded structure."),
+    ("Multimeric_G-Quadruplex", "Several tandem G4s, separated by ≤50 nt."),
+    ("Z-DNA", "Left-handed helix, alternating purine-pyrimidine (GC/CG/GT/TG/AC/CA) repeats."),
+    ("H-DNA", "Triplex-forming mirror repeats (polypurine/polypyrimidine)."),
+    ("Sticky_DNA", "Extended GAA or TTC repeats (≥5 units)."),
+    ("Slipped_DNA", "Direct repeats that can slip during replication."),
+    ("Cruciform_DNA", "Inverted repeats, may form cruciform/hairpin."),
+    ("Bent_DNA", "A-tract/T-tract periodicity causing DNA bending."),
+    ("Quadruplex-Triplex_Hybrid", "Region with G4 and triplex potential."),
+    ("Cruciform-Triplex_Junctions", "Junctions with both cruciform and triplex potential."),
+    ("G-Quadruplex_i-Motif_Hybrid", "Close proximity of G4 and i-motif sequences."),
 ]
 
 MOTIFS = [
@@ -30,7 +30,6 @@ MOTIFS = [
     ("Quadruplex", r"(C{3,}[ATGC]{1,12}){3}C{3,}", "i-Motif"),
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(G{3,}[ATGC]{1,12}){3}G{3,}", "Bipartite_G-Quadruplex"),
     ("Quadruplex", r"(G{3,}[ATGC]{1,12}){2}G{3,}", "G-Triplex"),
-    # Multimeric G4: two or more G4s separated by up to 50 nt
     ("Quadruplex", r"((G{3,}[ATGC]{1,12}){3}G{3,}([ATGC]{1,50}(G{3,}[ATGC]{1,12}){3}G{3,})+)", "Multimeric_G-Quadruplex"),
     ("Z-DNA", r"((GC|CG|GT|TG|AC|CA){6,})", "Z-DNA"),
     ("Triplex", r"([AG]{10,}|[CT]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "H-DNA"),
@@ -50,20 +49,24 @@ GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
 GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 """
 
-# --- UTILS ---
+# --------- UTILITIES ---------
 def parse_fasta(fasta_str: str) -> str:
+    """Parse FASTA-formatted string to a contiguous uppercase DNA sequence."""
     lines = fasta_str.strip().splitlines()
     seq = [line.strip() for line in lines if not line.startswith(">")]
     return "".join(seq).upper().replace(" ", "").replace("U", "T")
 
 def gc_content(seq: str) -> float:
+    """Compute GC content as a percentage."""
     seq = seq.upper()
-    return 100.0 * (seq.count("G") + seq.count("C")) / max(1, len(seq))
+    gc = seq.count("G") + seq.count("C")
+    return 100.0 * gc / max(1, len(seq))
 
 def wrap(seq: str, width=60) -> str:
     return "\n".join([seq[i:i+width] for i in range(0, len(seq), width)])
 
 def g4hunter_score(seq: str) -> float:
+    """Calculate G4Hunter score: +1 for G, -1 for C, 0 otherwise; average over sequence."""
     vals = []
     seq = seq.upper()
     i = 0
@@ -88,16 +91,17 @@ def g4hunter_score(seq: str) -> float:
     return np.mean(vals) if vals else 0.0
 
 def motif_propensity(name: str, seq: str) -> str:
+    """Calculate motif propensities: scientific, concise reporting per motif type."""
     if name == "G-Quadruplex":
         return f"{g4hunter_score(seq):.2f}"
     if name == "i-Motif":
+        # i-motif forms on C-rich, so apply G4Hunter to C-strand
         seq = seq.replace("G", "C")
         return f"{-g4hunter_score(seq):.2f}"
     if name == "G-Triplex":
         score = g4hunter_score(seq)
         return f"{score * 0.7:.2f}"
     if name == "Multimeric_G-Quadruplex":
-        # Average the individual G4 scores in the match
         g4s = re.findall(r"(G{3,}[ATGC]{1,12}){3}G{3,}", seq)
         if g4s:
             return f"{np.mean([g4hunter_score(g) for g in g4s]):.2f}"
@@ -128,6 +132,7 @@ def motif_propensity(name: str, seq: str) -> str:
     return "NA"
 
 def find_motifs(seq: str) -> list:
+    """Search for all defined motifs in the sequence. Return rich annotation."""
     results = []
     for motif_class, regex, name in MOTIFS:
         for m in re.finditer(regex, seq):
@@ -145,6 +150,7 @@ def find_motifs(seq: str) -> list:
     return results
 
 def find_multiconformational(results: list, max_gap=10) -> list:
+    """Detect motifs in close proximity with different classes (hybrid regions)."""
     if not results:
         return []
     df = pd.DataFrame(results)
@@ -192,15 +198,16 @@ def excel_download_button(df, label="Download Excel"):
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-# ---------------- APP LAYOUT START ----------------
-
+# ----------- APP LAYOUT -----------
 st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
 
-# Display PNG logo at the top, centered (nbd.PNG must be in the same directory as this script)
+# --- Responsive header image ---
 st.markdown(
     """
-    <div style="display:flex; justify-content:center; align-items:center; margin-bottom:-30px;">
-        <img src="nbd.PNG" alt="Non-B DNA Finder" style="width:230px; max-width:100%; height:auto;">
+    <div style="width:100%; display:flex; justify-content:center;">
+        <img src="https://raw.githubusercontent.com/VRYella/NonBDNAFinder/main/nbd.PNG" 
+             alt="Non-B DNA Finder Banner" 
+             style="width:100%; max-width:1200px; height:auto; display:block; margin-bottom:-30px;"/>
     </div>
     """,
     unsafe_allow_html=True
@@ -214,11 +221,11 @@ with st.expander("ℹ️ Motif Explanations"):
         st.markdown(f"**{name}**: {expl}")
 
 st.write(
-    "Upload a FASTA file or paste your sequence below. Supports single or multiline FASTA. "
+    "Upload a FASTA file or paste a DNA sequence below (A/T/G/C only). "
     "Click **Run Analysis** to begin."
 )
 
-# --- USER INPUT AREA ---
+# --------- Input Area ---------
 col1, col2 = st.columns(2)
 with col1:
     fasta_file = st.file_uploader("Upload FASTA file", type=["fa", "fasta", "txt"])
@@ -227,7 +234,7 @@ with col2:
         st.session_state["input_seq"] = EXAMPLE_FASTA
     input_seq = st.text_area("Paste sequence in FASTA format", st.session_state.get("input_seq", EXAMPLE_FASTA), height=120)
 
-# --- RUN & STOP BUTTONS ---
+# --------- Run & Stop Buttons ---------
 run = st.button("▶️ Run Analysis", key="run")
 stop = st.button("🛑 Stop", key="stop")
 
@@ -267,12 +274,11 @@ if not results:
 
 df = pd.DataFrame(all_results)
 
-# ----------------- SIDE BY SIDE VISUALIZATION --------------------
+# ----------- Results + Visualization ---------
 col_tbl, col_vis = st.columns([1, 1.1])
 
 with col_tbl:
     st.markdown("### 🧬 Predicted Non-B DNA Motifs")
-    # Colorful table
     st.dataframe(df.style.background_gradient(cmap="rainbow"), use_container_width=True, hide_index=True)
 
     with st.expander("Motif Class Summary", expanded=True):
@@ -292,7 +298,6 @@ with col_tbl:
 
 with col_vis:
     st.markdown("### 📊 Motif Visualization")
-    # Colorful motif visualization using seaborn color palette
     if results:
         plt.figure(figsize=(min(18, 2 + len(seq)/800), 6))
         motif_types = sorted(set(r['Subtype'] for r in results))
