@@ -6,6 +6,7 @@ import io
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
+import plotly.graph_objects as go
 
 # --- MOTIFS, CLASSES, and EXPLANATIONS ---
 MOTIF_INFO = [
@@ -51,13 +52,11 @@ GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 
 # --------- UTILITIES ---------
 def parse_fasta(fasta_str: str) -> str:
-    """Parse FASTA-formatted string to a contiguous uppercase DNA sequence."""
     lines = fasta_str.strip().splitlines()
     seq = [line.strip() for line in lines if not line.startswith(">")]
     return "".join(seq).upper().replace(" ", "").replace("U", "T")
 
 def gc_content(seq: str) -> float:
-    """Compute GC content as a percentage."""
     seq = seq.upper()
     gc = seq.count("G") + seq.count("C")
     return 100.0 * gc / max(1, len(seq))
@@ -66,7 +65,6 @@ def wrap(seq: str, width=60) -> str:
     return "\n".join([seq[i:i+width] for i in range(0, len(seq), width)])
 
 def g4hunter_score(seq: str) -> float:
-    """Calculate G4Hunter score: +1 for G, -1 for C, 0 otherwise; average over sequence."""
     vals = []
     seq = seq.upper()
     i = 0
@@ -91,11 +89,9 @@ def g4hunter_score(seq: str) -> float:
     return np.mean(vals) if vals else 0.0
 
 def motif_propensity(name: str, seq: str) -> str:
-    """Calculate motif propensities: scientific, concise reporting per motif type."""
     if name == "G-Quadruplex":
         return f"{g4hunter_score(seq):.2f}"
     if name == "i-Motif":
-        # i-motif forms on C-rich, so apply G4Hunter to C-strand
         seq = seq.replace("G", "C")
         return f"{-g4hunter_score(seq):.2f}"
     if name == "G-Triplex":
@@ -132,7 +128,6 @@ def motif_propensity(name: str, seq: str) -> str:
     return "NA"
 
 def find_motifs(seq: str) -> list:
-    """Search for all defined motifs in the sequence. Return rich annotation."""
     results = []
     for motif_class, regex, name in MOTIFS:
         for m in re.finditer(regex, seq):
@@ -145,12 +140,11 @@ def find_motifs(seq: str) -> list:
                 "Length": len(region),
                 "GC (%)": f"{gc_content(region):.1f}",
                 "Propensity/Score": motif_propensity(name, region),
-                "Sequence": wrap(region, 60),
+                "Sequence": wrap(region.replace("_", " "), 60),  # Replace _ with space
             })
     return results
 
 def find_multiconformational(results: list, max_gap=10) -> list:
-    """Detect motifs in close proximity with different classes (hybrid regions)."""
     if not results:
         return []
     df = pd.DataFrame(results)
@@ -159,7 +153,7 @@ def find_multiconformational(results: list, max_gap=10) -> list:
     for i in range(len(df)-1):
         curr, nxt = df.iloc[i], df.iloc[i+1]
         if nxt["Start"] - curr["End"] <= max_gap and curr["Subtype"] != nxt["Subtype"]:
-            mcr_seq = curr["Sequence"].replace("\n", "") + nxt["Sequence"].replace("\n", "")
+            mcr_seq = curr["Sequence"].replace("\n", "").replace("_", " ") + nxt["Sequence"].replace("\n", "").replace("_", " ")
             mcrs.append({
                 "Motif Class": "Multi-Conformational",
                 "Subtype": f"{curr['Subtype']}/{nxt['Subtype']}",
@@ -168,7 +162,7 @@ def find_multiconformational(results: list, max_gap=10) -> list:
                 "Length": nxt["End"] - curr["Start"] + 1,
                 "GC (%)": f"{gc_content(mcr_seq):.1f}",
                 "Propensity/Score": "NA",
-                "Sequence": wrap(mcr_seq, 60)
+                "Sequence": wrap(mcr_seq.replace("_", " "), 60)
             })
     return mcrs
 
@@ -201,6 +195,16 @@ def excel_download_button(df, label="Download Excel"):
 # ----------- APP LAYOUT -----------
 st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
 
+# --- Custom CSS for modern look ---
+st.markdown("""
+    <style>
+    body { background: #f8f9fc !important; }
+    .stApp { font-family: 'Segoe UI',sans-serif; }
+    .motif-bar { background: #e9ecef; border-radius: 8px; padding: 8px; }
+    .motif-label { font-weight: 600; color: #22223b; }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- Responsive header image ---
 st.markdown(
     """
@@ -222,7 +226,7 @@ with st.expander("ℹ️ Motif Explanations"):
 
 st.write(
     "Upload a FASTA file or paste a DNA sequence below (A/T/G/C only). "
-    "Click **Run Analysis** to begin."
+    "Click **Run** to begin."
 )
 
 # --------- Input Area ---------
@@ -234,13 +238,18 @@ with col2:
         st.session_state["input_seq"] = EXAMPLE_FASTA
     input_seq = st.text_area("Paste sequence in FASTA format", st.session_state.get("input_seq", EXAMPLE_FASTA), height=120)
 
-# --------- Run & Stop Buttons ---------
-run = st.button("▶️ Run Analysis", key="run")
-stop = st.button("🛑 Stop", key="stop")
-
-if stop:
-    st.warning("Analysis stopped by user.")
-    st.stop()
+# --------- Run & Stop Buttons (Horizontal) ---------
+run_col, stop_col, status_col = st.columns([1,1,3])
+with run_col:
+    run = st.button("▶️ Run", key="run", use_container_width=True)
+with stop_col:
+    stop = st.button("🛑 Stop", key="stop", use_container_width=True)
+with status_col:
+    if stop:
+        st.warning("Processing stopped by user.")
+        st.stop()
+    if run:
+        st.info("Running analysis...", icon="🧬")
 
 seq = None
 if "input_seq" in st.session_state and st.session_state["input_seq"] == EXAMPLE_FASTA:
@@ -255,18 +264,19 @@ elif input_seq.strip():
     seq = parse_fasta(input_seq.strip())
 
 if not run:
-    st.info("Load or paste a sequence, then click 'Run Analysis'.")
+    st.info("Load or paste a sequence, then click 'Run'.")
     st.stop()
 
 if not seq or not re.match("^[ATGC]+$", seq):
     st.error("No valid DNA sequence detected. Please upload or paste a valid FASTA (A/T/G/C only).")
     st.stop()
 
-st.markdown(f"**Sequence length:** {len(seq):,} bp")
+st.markdown(f"<div class='motif-label'>Sequence length: <b>{len(seq):,} bp</b></div>", unsafe_allow_html=True)
 
-results = find_motifs(seq)
-multi_conf = find_multiconformational(results)
-all_results = results + multi_conf
+with st.spinner('Analyzing sequence...'):
+    results = find_motifs(seq)
+    multi_conf = find_multiconformational(results)
+    all_results = results + multi_conf
 
 if not results:
     st.warning("No non-B DNA motifs detected in this sequence.")
@@ -277,10 +287,10 @@ df = pd.DataFrame(all_results)
 # ----------- Results + Visualization ---------
 col_tbl, col_vis = st.columns([1, 1.1])
 
+# ---- Table and download ----
 with col_tbl:
     st.markdown("### 🧬 Predicted Non-B DNA Motifs")
     st.dataframe(df.style.background_gradient(cmap="rainbow"), use_container_width=True, hide_index=True)
-
     with st.expander("Motif Class Summary", expanded=True):
         motif_counts = df["Subtype"].value_counts().reset_index()
         motif_counts.columns = ["Motif Type", "Count"]
@@ -289,36 +299,101 @@ with col_tbl:
             use_container_width=True, 
             hide_index=True
         )
-
     col_csv, col_excel = st.columns(2)
     with col_csv:
         csv_download_button(df, "Download Results as CSV")
     with col_excel:
         excel_download_button(df, "Download Results as Excel")
 
+# ---- Linear full-sequence motif visualization ----
 with col_vis:
-    st.markdown("### 📊 Motif Visualization")
-    if results:
-        plt.figure(figsize=(min(18, 2 + len(seq)/800), 6))
-        motif_types = sorted(set(r['Subtype'] for r in results))
-        type2y = {cl: i+1 for i, cl in enumerate(motif_types)}
-        palette = sns.color_palette("hsv", len(motif_types))
-        subtype2color = {subtype: palette[i] for i, subtype in enumerate(motif_types)}
-        for r in results:
-            y = type2y[r['Subtype']]
-            plt.plot([r['Start'], r['End']], [y, y], lw=14,
-                     color=subtype2color[r['Subtype']],
-                     label=r['Subtype'] if r['Start'] == min(rr['Start'] for rr in results if rr['Subtype'] == r['Subtype']) else "")
-        plt.yticks(list(type2y.values()), list(type2y.keys()))
-        plt.xlabel("Sequence Position (bp)")
-        plt.ylabel("Motif Type")
-        plt.title("Non-B DNA Motif Locations", fontsize=16, color='#432371')
-        plt.tight_layout()
-        handles, labels = plt.gca().get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        if by_label:
-            plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
-        st.pyplot(plt)
-        plt.close()
-    else:
-        st.info("No motifs to visualize.")
+    st.markdown("### 📊 Motif Map (Full Sequence)")
+    # Plotly for interactive & colorful bar visualization
+    motif_types = sorted(set(r['Subtype'] for r in results))
+    color_map = {typ: f"hsl({i*360//max(1,len(motif_types))},70%,55%)" for i, typ in enumerate(motif_types)}
+
+    fig = go.Figure()
+
+    # Draw full sequence as faint bar
+    fig.add_trace(go.Bar(
+        x=[len(seq)],
+        y=["Sequence"],
+        orientation='h',
+        marker=dict(color='#e0e0e0'),
+        width=0.4,
+        showlegend=False,
+        hoverinfo='skip',
+    ))
+
+    # Add motifs as colored overlays
+    for r in results:
+        start = r['Start']-1
+        end = r['End']
+        motif_type = r['Subtype']
+        color = color_map[motif_type]
+        fig.add_trace(go.Bar(
+            x=[end-start],
+            y=["Sequence"],
+            orientation='h',
+            base=[start],
+            marker=dict(color=color, line=dict(color='black', width=0.8)),
+            width=0.4,
+            name=motif_type,
+            hovertemplate=f"<b>{motif_type}</b><br>Pos: {start+1}-{end}<br>Len: {end-start} bp<br>Score: {r['Propensity/Score']}<extra></extra>",
+            showlegend=False,
+        ))
+
+    # Legend (separate color boxes)
+    for motif_type in color_map:
+        fig.add_trace(go.Bar(
+            x=[0],
+            y=[motif_type],
+            marker=dict(color=color_map[motif_type]),
+            showlegend=True,
+            name=motif_type,
+            base=[0],
+            orientation='h',
+            hoverinfo='skip',
+            width=0.3
+        ))
+
+    fig.update_layout(
+        barmode='overlay',
+        height=400,
+        margin=dict(t=40, b=30, l=40, r=40),
+        xaxis=dict(title='Position (bp)', range=[0, len(seq)], showgrid=False),
+        yaxis=dict(showticklabels=True, tickvals=["Sequence"], title=''),
+        showlegend=True,
+        legend_title="Motif Type",
+        plot_bgcolor="#f9f9fc",
+        paper_bgcolor="#f9f9fc",
+        font=dict(size=15)
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Optionally, show first 100-200bp as text with motif highlights
+    st.markdown("#### Sequence (first 200bp, motifs highlighted)")
+    motif_regions = []
+    for r in results:
+        motif_regions.append((r['Start']-1, r['End'], color_map[r['Subtype']]))
+    motif_regions.sort()
+    out_html = ""
+    i = 0
+    shown = 0
+    max_len = min(200, len(seq))
+    while i < max_len:
+        match = None
+        for s, e, c in motif_regions:
+            if s <= i < e:
+                match = c
+                break
+        char = seq[i] if seq[i] != "_" else " "
+        if match:
+            out_html += f"<span style='background:{match};color:#fff;border-radius:2px;padding:0 2px'>{char}</span>"
+        else:
+            out_html += char
+        i += 1
+        shown += 1
+        if shown % 60 == 0:
+            out_html += "<br>"
+    st.markdown(f"<div style='font-family:monospace;font-size:1.0em;'>{out_html}</div>", unsafe_allow_html=True)
