@@ -207,7 +207,7 @@ st.markdown(
     <div style="width:100%; display:flex; justify-content:center;">
         <img src="https://raw.githubusercontent.com/VRYella/NonBDNAFinder/main/nbd.PNG" 
              alt="Non-B DNA Finder Banner" 
-             style="width:100%; max-width:1200px; height:auto; display:block; margin-bottom:-60px;"/>
+             style="width:100%; max-width:1400px; height:auto; display:block; margin-bottom:-20px;"/>
     </div>
     """,
     unsafe_allow_html=True
