@@ -207,13 +207,13 @@ st.markdown(
     <div style="width:100%; display:flex; justify-content:center;">
         <img src="https://raw.githubusercontent.com/VRYella/NonBDNAFinder/main/nbd.PNG" 
              alt="Non-B DNA Finder Banner" 
-             style="width:100%; max-width:1200px; height:auto; display:block; margin-bottom:-30px;"/>
+             style="width:100%; max-width:1200px; height:auto; display:block; margin-bottom:-60px;"/>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-st.title("🧬 Non-B DNA Motif Finder")
+st.title("Non-B DNA Motif Finder")
 st.caption("Detects and visualizes non-B DNA motifs, including G-quadruplexes, triplexes, Z-DNA, and more.")
 
 with st.expander("ℹ️ Motif Explanations"):
