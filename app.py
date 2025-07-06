@@ -6,7 +6,6 @@ import io
 import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
-import plotly.graph_objects as go
 
 # --- MOTIFS, CLASSES, and EXPLANATIONS ---
 MOTIF_INFO = [
@@ -140,7 +139,7 @@ def find_motifs(seq: str) -> list:
                 "Length": len(region),
                 "GC (%)": f"{gc_content(region):.1f}",
                 "Propensity/Score": motif_propensity(name, region),
-                "Sequence": wrap(region.replace("_", " "), 60),  # Replace _ with space
+                "Sequence": wrap(region.replace("_", " "), 60),
             })
     return results
 
@@ -305,71 +304,41 @@ with col_tbl:
     with col_excel:
         excel_download_button(df, "Download Results as Excel")
 
-# ---- Linear full-sequence motif visualization ----
+# ---- Lollipop Motif Position Visualization ----
 with col_vis:
-    st.markdown("### 📊 Motif Map (Full Sequence)")
-    # Plotly for interactive & colorful bar visualization
+    st.markdown("### 📍 Motif Positions (Lollipop Plot)")
+    import matplotlib.pyplot as plt
+
     motif_types = sorted(set(r['Subtype'] for r in results))
-    color_map = {typ: f"hsl({i*360//max(1,len(motif_types))},70%,55%)" for i, typ in enumerate(motif_types)}
+    color_palette = sns.color_palette('husl', n_colors=len(motif_types))
+    color_map = {typ: color_palette[i] for i, typ in enumerate(motif_types)}
 
-    fig = go.Figure()
+    fig, ax = plt.subplots(figsize=(10, 2.5))
+    ax.hlines(1, 1, len(seq), color='gray', linewidth=2, label='Sequence')
+    y = 1.1
 
-    # Draw full sequence as faint bar
-    fig.add_trace(go.Bar(
-        x=[len(seq)],
-        y=["Sequence"],
-        orientation='h',
-        marker=dict(color='#e0e0e0'),
-        width=0.4,
-        showlegend=False,
-        hoverinfo='skip',
-    ))
-
-    # Add motifs as colored overlays
-    for r in results:
-        start = r['Start']-1
-        end = r['End']
-        motif_type = r['Subtype']
+    for motif in results:
+        xpos = motif['Start']
+        motif_type = motif['Subtype']
         color = color_map[motif_type]
-        fig.add_trace(go.Bar(
-            x=[end-start],
-            y=["Sequence"],
-            orientation='h',
-            base=[start],
-            marker=dict(color=color, line=dict(color='black', width=0.8)),
-            width=0.4,
-            name=motif_type,
-            hovertemplate=f"<b>{motif_type}</b><br>Pos: {start+1}-{end}<br>Len: {end-start} bp<br>Score: {r['Propensity/Score']}<extra></extra>",
-            showlegend=False,
-        ))
+        # Draw lollipop stick
+        ax.vlines(xpos, 1, y, color=color, linewidth=2)
+        # Draw lollipop head
+        ax.plot(xpos, y, 'o', color=color, markersize=10, label=motif_type)
 
-    # Legend (separate color boxes)
-    for motif_type in color_map:
-        fig.add_trace(go.Bar(
-            x=[0],
-            y=[motif_type],
-            marker=dict(color=color_map[motif_type]),
-            showlegend=True,
-            name=motif_type,
-            base=[0],
-            orientation='h',
-            hoverinfo='skip',
-            width=0.3
-        ))
+    # Remove duplicate legend entries
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.0, 1.0))
 
-    fig.update_layout(
-        barmode='overlay',
-        height=400,
-        margin=dict(t=40, b=30, l=40, r=40),
-        xaxis=dict(title='Position (bp)', range=[0, len(seq)], showgrid=False),
-        yaxis=dict(showticklabels=True, tickvals=["Sequence"], title=''),
-        showlegend=True,
-        legend_title="Motif Type",
-        plot_bgcolor="#f9f9fc",
-        paper_bgcolor="#f9f9fc",
-        font=dict(size=15)
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    ax.set_xlim(0, len(seq)+1)
+    ax.set_ylim(0.95, 1.25)
+    ax.set_yticks([])
+    ax.set_xlabel('Position on Sequence (bp)')
+    ax.set_title('Motif Positions (Lollipop Plot)')
+    sns.despine(left=True, bottom=False)
+    plt.tight_layout()
+    st.pyplot(fig)
 
     # Optionally, show first 100-200bp as text with motif highlights
     st.markdown("#### Sequence (first 200bp, motifs highlighted)")
@@ -385,7 +354,7 @@ with col_vis:
         match = None
         for s, e, c in motif_regions:
             if s <= i < e:
-                match = c
+                match = '#%02x%02x%02x' % tuple(int(255*x) for x in c)
                 break
         char = seq[i] if seq[i] != "_" else " "
         if match:
