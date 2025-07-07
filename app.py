@@ -23,6 +23,11 @@ MOTIF_INFO = [
     ("Quadruplex-Triplex_Hybrid", "Region with G4 and triplex potential."),
     ("Cruciform-Triplex_Junctions", "Junctions with both cruciform and triplex potential."),
     ("G-Quadruplex_i-Motif_Hybrid", "Close proximity of G4 and i-motif sequences."),
+    # Added motif explanations for new motifs
+    ("CA Dinucleotide Bend", "Local bend (~5–10° per repeat) and flexibility due to roll and tilt."),
+    ("TG Dinucleotide Bend", "Local bend (~5–10° per repeat) and flexibility in regulatory regions."),
+    ("A-Tract Local Bend", "Local bend (~17–20°) due to narrow minor groove; A7 may increase flexibility."),
+    ("T-Tract Local Bend", "Local bend (~10–15°) with flexibility in A/T-rich regions."),
 ]
 
 MOTIFS = [
@@ -40,6 +45,11 @@ MOTIFS = [
     ("Quadruplex-Triplex Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}([AG]{10,}|[CT]{10,})", "Quadruplex-Triplex_Hybrid"),
     ("Cruciform-Triplex Junction", r"([ATGC]{10,})([ATGC]{0,100})([ATGC]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "Cruciform-Triplex_Junctions"),
     ("G-Quadruplex_i-Motif_Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(C{3,}[ATGC]{1,12}){3}C{3,}", "G-Quadruplex_i-Motif_Hybrid"),
+    # --- Added strongest non-B DNA motifs as requested
+    ("Local Bend", r"(CA){4,}", "CA Dinucleotide Bend"),
+    ("Local Bend", r"(TG){4,}", "TG Dinucleotide Bend"),
+    ("Local Bend", r"A{6,7}", "A-Tract Local Bend"),
+    ("Local Bend", r"T{6,7}", "T-Tract Local Bend"),
 ]
 
 EXAMPLE_FASTA = """>Example
@@ -124,6 +134,7 @@ def motif_propensity(name: str, seq: str) -> str:
     if name == "Bent_DNA":
         tracts = re.findall(r"A{4,6}|T{4,6}", seq)
         return f"{max([len(t) for t in tracts])}bp-tract" if tracts else "NA"
+    # For new motifs, you could add more specific scoring as desired
     return "NA"
 
 def find_motifs(seq: str) -> list:
@@ -304,65 +315,33 @@ with col_tbl:
     with col_excel:
         excel_download_button(df, "Download Results as Excel")
 
-# ---- Lollipop Motif Position Visualization ----
+# ---- Motif Map Visualization: Separate Lines for Each Motif Type ----
 with col_vis:
-    st.markdown("### 📍 Motif Positions (Lollipop Plot)")
-    import matplotlib.pyplot as plt
+    st.markdown("### 📍 Motif Map (Full Sequence)")
 
     motif_types = sorted(set(r['Subtype'] for r in results))
     color_palette = sns.color_palette('husl', n_colors=len(motif_types))
     color_map = {typ: color_palette[i] for i, typ in enumerate(motif_types)}
+    y_map = {typ: i+1 for i, typ in enumerate(motif_types)}
 
-    fig, ax = plt.subplots(figsize=(10, 2.5))
-    ax.hlines(1, 1, len(seq), color='gray', linewidth=2, label='Sequence')
-    y = 1.1
-
+    fig, ax = plt.subplots(figsize=(10, len(motif_types)*0.7+2))
     for motif in results:
-        xpos = motif['Start']
         motif_type = motif['Subtype']
+        y = y_map[motif_type]
         color = color_map[motif_type]
-        # Draw lollipop stick
-        ax.vlines(xpos, 1, y, color=color, linewidth=2)
-        # Draw lollipop head
-        ax.plot(xpos, y, 'o', color=color, markersize=10, label=motif_type)
-
+        # Draw motif span as a thick line
+        ax.hlines(y, motif['Start'], motif['End'], color=color, linewidth=8, label=motif_type)
+    ax.set_yticks(list(y_map.values()))
+    ax.set_yticklabels(list(y_map.keys()))
+    ax.set_xlim(0, len(seq)+1)
+    ax.set_xlabel('Position on Sequence (bp)')
+    ax.set_title('Motif Map (Full Sequence)')
     # Remove duplicate legend entries
     handles, labels = ax.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.0, 1.0))
-
-    ax.set_xlim(0, len(seq)+1)
-    ax.set_ylim(0.95, 1.25)
-    ax.set_yticks([])
-    ax.set_xlabel('Position on Sequence (bp)')
-    ax.set_title('Motif Positions (Lollipop Plot)')
-    sns.despine(left=True, bottom=False)
+    # ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.0, 1.0)) # Can be uncommented if legend needed
+    sns.despine(left=False, bottom=False)
     plt.tight_layout()
     st.pyplot(fig)
 
-    # Optionally, show first 100-200bp as text with motif highlights
-    st.markdown("#### Sequence (first 200bp, motifs highlighted)")
-    motif_regions = []
-    for r in results:
-        motif_regions.append((r['Start']-1, r['End'], color_map[r['Subtype']]))
-    motif_regions.sort()
-    out_html = ""
-    i = 0
-    shown = 0
-    max_len = min(200, len(seq))
-    while i < max_len:
-        match = None
-        for s, e, c in motif_regions:
-            if s <= i < e:
-                match = '#%02x%02x%02x' % tuple(int(255*x) for x in c)
-                break
-        char = seq[i] if seq[i] != "_" else " "
-        if match:
-            out_html += f"<span style='background:{match};color:#fff;border-radius:2px;padding:0 2px'>{char}</span>"
-        else:
-            out_html += char
-        i += 1
-        shown += 1
-        if shown % 60 == 0:
-            out_html += "<br>"
-    st.markdown(f"<div style='font-family:monospace;font-size:1.0em;'>{out_html}</div>", unsafe_allow_html=True)
+# (The "Sequence (first 200bp, motifs highlighted)" section has been removed as requested.)
