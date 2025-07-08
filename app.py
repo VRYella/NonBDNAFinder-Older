@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 
-# --- MOTIFS, CLASSES, and EXPLANATIONS ---
+# ------------------- MOTIF DATA -------------------
 MOTIF_INFO = [
     ("G-Quadruplex", "Guanine-rich, four-stranded DNA structure, four runs of ≥3 Gs, loops of 1-12 nt."),
     ("i-Motif", "Cytosine-rich quadruplex, forms at low pH."),
@@ -23,7 +23,6 @@ MOTIF_INFO = [
     ("Quadruplex-Triplex_Hybrid", "Region with G4 and triplex potential."),
     ("Cruciform-Triplex_Junctions", "Junctions with both cruciform and triplex potential."),
     ("G-Quadruplex_i-Motif_Hybrid", "Close proximity of G4 and i-motif sequences."),
-    # Added motif explanations for new motifs
     ("CA Dinucleotide Bend", "Local bend (~5–10° per repeat) and flexibility due to roll and tilt."),
     ("TG Dinucleotide Bend", "Local bend (~5–10° per repeat) and flexibility in regulatory regions."),
     ("A-Tract Local Bend", "Local bend (~17–20°) due to narrow minor groove; A7 may increase flexibility."),
@@ -45,7 +44,6 @@ MOTIFS = [
     ("Quadruplex-Triplex Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}([AG]{10,}|[CT]{10,})", "Quadruplex-Triplex_Hybrid"),
     ("Cruciform-Triplex Junction", r"([ATGC]{10,})([ATGC]{0,100})([ATGC]{10,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", "Cruciform-Triplex_Junctions"),
     ("G-Quadruplex_i-Motif_Hybrid", r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(C{3,}[ATGC]{1,12}){3}C{3,}", "G-Quadruplex_i-Motif_Hybrid"),
-    # --- Added strongest non-B DNA motifs as requested
     ("Local Bend", r"(CA){4,}", "CA Dinucleotide Bend"),
     ("Local Bend", r"(TG){4,}", "TG Dinucleotide Bend"),
     ("Local Bend", r"A{6,7}", "A-Tract Local Bend"),
@@ -59,7 +57,8 @@ GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
 GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 """
 
-# --------- UTILITIES ---------
+# ------------------- UTILITIES -------------------
+
 def parse_fasta(fasta_str: str) -> str:
     lines = fasta_str.strip().splitlines()
     seq = [line.strip() for line in lines if not line.startswith(">")]
@@ -134,7 +133,6 @@ def motif_propensity(name: str, seq: str) -> str:
     if name == "Bent_DNA":
         tracts = re.findall(r"A{4,6}|T{4,6}", seq)
         return f"{max([len(t) for t in tracts])}bp-tract" if tracts else "NA"
-    # For new motifs, you could add more specific scoring as desired
     return "NA"
 
 def find_motifs(seq: str) -> list:
@@ -154,194 +152,177 @@ def find_motifs(seq: str) -> list:
             })
     return results
 
-def find_multiconformational(results: list, max_gap=10) -> list:
-    if not results:
-        return []
-    df = pd.DataFrame(results)
-    df = df.sort_values("Start")
-    mcrs = []
-    for i in range(len(df)-1):
-        curr, nxt = df.iloc[i], df.iloc[i+1]
-        if nxt["Start"] - curr["End"] <= max_gap and curr["Subtype"] != nxt["Subtype"]:
-            mcr_seq = curr["Sequence"].replace("\n", "").replace("_", " ") + nxt["Sequence"].replace("\n", "").replace("_", " ")
-            mcrs.append({
-                "Motif Class": "Multi-Conformational",
-                "Subtype": f"{curr['Subtype']}/{nxt['Subtype']}",
-                "Start": curr["Start"],
-                "End": nxt["End"],
-                "Length": nxt["End"] - curr["Start"] + 1,
-                "GC (%)": f"{gc_content(mcr_seq):.1f}",
-                "Propensity/Score": "NA",
-                "Sequence": wrap(mcr_seq.replace("_", " "), 60)
-            })
-    return mcrs
+# ------------------- PAGE LOGIC -------------------
 
-def csv_download_button(df, label="Download CSV"):
-    nowstr = datetime.now().strftime("%Y%m%d-%H%M%S")
-    st.download_button(
-        label=label,
-        data=df.to_csv(index=False).encode('utf-8'),
-        file_name=f"motifs_{nowstr}.csv",
-        mime="text/csv"
-    )
-
-def excel_download_button(df, label="Download Excel"):
-    nowstr = datetime.now().strftime("%Y%m%d-%H%M%S")
-    output = io.BytesIO()
-    try:
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False)
-    except ImportError:
-        st.error("openpyxl is required for Excel export. Please install it.")
-        return
-    output.seek(0)
-    st.download_button(
-        label=label,
-        data=output.getvalue(),
-        file_name=f"motifs_{nowstr}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-# ----------- APP LAYOUT -----------
 st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
 
-# --- Custom CSS for modern look ---
-st.markdown("""
-    <style>
-    body { background: #f8f9fc !important; }
-    .stApp { font-family: 'Segoe UI',sans-serif; }
-    .motif-bar { background: #e9ecef; border-radius: 8px; padding: 8px; }
-    .motif-label { font-weight: 600; color: #22223b; }
-    </style>
-""", unsafe_allow_html=True)
+# --- SESSION STATE ---
+if 'seq' not in st.session_state:
+    st.session_state['seq'] = ""
+if 'df' not in st.session_state:
+    st.session_state['df'] = pd.DataFrame()
+if 'motif_results' not in st.session_state:
+    st.session_state['motif_results'] = []
 
-# --- Responsive header image ---
-st.markdown(
-    """
-    <div style="width:100%; display:flex; justify-content:center;">
-        <img src="https://raw.githubusercontent.com/VRYella/NonBDNAFinder/main/nbd.PNG" 
-             alt="Non-B DNA Finder Banner" 
-             style="width:100%; max-width:1400px; height:auto; display:block; margin-bottom:-20px;"/>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# --- NAVIGATION ---
+pages = ["Home", "Upload & Analyze", "Results", "Visualization", "Download Report", "About", "Contact"]
+page = st.sidebar.radio("Navigation", pages)
 
-st.title("Non-B DNA Motif Finder")
-st.caption("Detects and visualizes non-B DNA motifs, including G-quadruplexes, triplexes, Z-DNA, and more.")
-
-with st.expander("ℹ️ Motif Explanations"):
+# --- HOME PAGE ---
+if page == "Home":
+    st.title("Non-B DNA Motif Finder")
+    st.image("https://raw.githubusercontent.com/VRYella/NonBDNAFinder/main/nbd.PNG", use_column_width=True)
+    st.markdown("**Detects and visualizes non-B DNA motifs, including G-quadruplexes, triplexes, Z-DNA, and more.**")
+    st.subheader("Motif Explanations")
     for name, expl in MOTIF_INFO:
-        st.markdown(f"**{name}**: {expl}")
+        st.markdown(f"- **{name}**: {expl}")
 
-st.write(
-    "Upload a FASTA file or paste a DNA sequence below (A/T/G/C only). "
-    "Click **Run** to begin."
-)
+# --- UPLOAD & ANALYZE PAGE ---
+elif page == "Upload & Analyze":
+    st.header("Upload or Paste Sequence")
+    col1, col2 = st.columns([1,1])
+    with col1:
+        fasta_file = st.file_uploader("Upload FASTA file", type=["fa", "fasta", "txt"])
+        if fasta_file:
+            try:
+                seq = parse_fasta(fasta_file.read().decode("utf-8"))
+                st.session_state['seq'] = seq
+                st.success("FASTA file loaded!")
+            except Exception:
+                st.error("Could not parse file as UTF-8 or FASTA.")
+    with col2:
+        if st.button("Use Example Sequence"):
+            st.session_state['seq'] = parse_fasta(EXAMPLE_FASTA)
+        seq_input = st.text_area("Paste sequence (FASTA or raw)", value=st.session_state.get('seq', ""), height=120)
+        if seq_input:
+            try:
+                seq = parse_fasta(seq_input)
+                st.session_state['seq'] = seq
+            except Exception:
+                st.error("Paste a valid FASTA or sequence.")
 
-# --------- Input Area ---------
-col1, col2 = st.columns(2)
-with col1:
-    fasta_file = st.file_uploader("Upload FASTA file", type=["fa", "fasta", "txt"])
-with col2:
-    if st.button("Use Example Sequence"):
-        st.session_state["input_seq"] = EXAMPLE_FASTA
-    input_seq = st.text_area("Paste sequence in FASTA format", st.session_state.get("input_seq", EXAMPLE_FASTA), height=120)
+    if st.button("Run Analysis"):
+        seq = st.session_state.get('seq', "")
+        if not seq or not re.match("^[ATGC]+$", seq):
+            st.error("Please upload or paste a valid DNA sequence (A/T/G/C only).")
+        else:
+            st.info("Analyzing sequence ...")
+            results = find_motifs(seq)
+            st.session_state['motif_results'] = results
+            st.session_state['df'] = pd.DataFrame(results)
+            if not results:
+                st.warning("No non-B DNA motifs detected in this sequence.")
+            else:
+                st.success(f"Detected {len(results)} motif region(s) in {len(seq):,} bp.")
 
-# --------- Run & Stop Buttons (Horizontal) ---------
-run_col, stop_col, status_col = st.columns([1,1,3])
-with run_col:
-    run = st.button("▶️ Run", key="run", use_container_width=True)
-with stop_col:
-    stop = st.button("🛑 Stop", key="stop", use_container_width=True)
-with status_col:
-    if stop:
-        st.warning("Processing stopped by user.")
-        st.stop()
-    if run:
-        st.info("Running analysis...", icon="🧬")
+# --- RESULTS PAGE ---
+elif page == "Results":
+    st.header("Motif Detection Results")
+    df = st.session_state.get('df', pd.DataFrame())
+    if df.empty:
+        st.info("No results yet. Go to 'Upload & Analyze' and run analysis.")
+    else:
+        st.markdown(f"**Sequence length:** {len(st.session_state['seq']):,} bp")
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        with st.expander("Motif Class Summary"):
+            motif_counts = df["Subtype"].value_counts().reset_index()
+            motif_counts.columns = ["Motif Type", "Count"]
+            st.dataframe(motif_counts, use_container_width=True, hide_index=True)
 
-seq = None
-if "input_seq" in st.session_state and st.session_state["input_seq"] == EXAMPLE_FASTA:
-    seq = parse_fasta(EXAMPLE_FASTA)
-elif fasta_file is not None:
-    try:
-        seq = parse_fasta(fasta_file.read().decode("utf-8"))
-    except Exception:
-        st.error("File could not be decoded as UTF-8. Please upload a valid text-based FASTA file.")
-        st.stop()
-elif input_seq.strip():
-    seq = parse_fasta(input_seq.strip())
+# --- VISUALIZATION PAGE ---
+elif page == "Visualization":
+    st.header("Motif Visualization")
+    df = st.session_state.get('df', pd.DataFrame())
+    seq = st.session_state.get('seq', "")
+    if df.empty:
+        st.info("No results to visualize. Run analysis first.")
+    else:
+        # Motif map
+        st.subheader("Motif Map (Full Sequence)")
+        motif_types = sorted(df['Subtype'].unique())
+        color_palette = sns.color_palette('husl', n_colors=len(motif_types))
+        color_map = {typ: color_palette[i] for i, typ in enumerate(motif_types)}
+        y_map = {typ: i+1 for i, typ in enumerate(motif_types)}
 
-if not run:
-    st.info("Load or paste a sequence, then click 'Run'.")
-    st.stop()
+        fig, ax = plt.subplots(figsize=(10, len(motif_types)*0.7+2))
+        for _, motif in df.iterrows():
+            motif_type = motif['Subtype']
+            y = y_map[motif_type]
+            color = color_map[motif_type]
+            ax.hlines(y, motif['Start'], motif['End'], color=color, linewidth=8)
+        ax.set_yticks(list(y_map.values()))
+        ax.set_yticklabels(list(y_map.keys()))
+        ax.set_xlim(0, len(seq)+1)
+        ax.set_xlabel('Position on Sequence (bp)')
+        ax.set_title('Motif Map (Full Sequence)')
+        sns.despine(left=False, bottom=False)
+        plt.tight_layout()
+        st.pyplot(fig)
 
-if not seq or not re.match("^[ATGC]+$", seq):
-    st.error("No valid DNA sequence detected. Please upload or paste a valid FASTA (A/T/G/C only).")
-    st.stop()
+        # Pie chart
+        st.subheader("Motif Type Distribution (Pie Chart)")
+        counts = df['Subtype'].value_counts()
+        fig2, ax2 = plt.subplots()
+        ax2.pie(counts, labels=counts.index, autopct='%1.1f%%', startangle=140)
+        ax2.axis('equal')
+        st.pyplot(fig2)
 
-st.markdown(f"<div class='motif-label'>Sequence length: <b>{len(seq):,} bp</b></div>", unsafe_allow_html=True)
+        # Bar chart
+        st.subheader("Motif Counts (Bar Chart)")
+        fig3, ax3 = plt.subplots()
+        counts.plot.bar(ax=ax3)
+        ax3.set_ylabel("Count")
+        ax3.set_xlabel("Motif Type")
+        plt.tight_layout()
+        st.pyplot(fig3)
 
-with st.spinner('Analyzing sequence...'):
-    results = find_motifs(seq)
-    multi_conf = find_multiconformational(results)
-    all_results = results + multi_conf
-
-if not results:
-    st.warning("No non-B DNA motifs detected in this sequence.")
-    st.stop()
-
-df = pd.DataFrame(all_results)
-
-# ----------- Results + Visualization ---------
-col_tbl, col_vis = st.columns([1, 1.1])
-
-# ---- Table and download ----
-with col_tbl:
-    st.markdown("### 🧬 Predicted Non-B DNA Motifs")
-    st.dataframe(df.style.background_gradient(cmap="rainbow"), use_container_width=True, hide_index=True)
-    with st.expander("Motif Class Summary", expanded=True):
-        motif_counts = df["Subtype"].value_counts().reset_index()
-        motif_counts.columns = ["Motif Type", "Count"]
-        st.dataframe(
-            motif_counts.style.background_gradient(cmap="cool"), 
-            use_container_width=True, 
-            hide_index=True
+# --- DOWNLOAD REPORT PAGE ---
+elif page == "Download Report":
+    st.header("Download Motif Report")
+    df = st.session_state.get('df', pd.DataFrame())
+    if df.empty:
+        st.info("No results to download. Run analysis first.")
+    else:
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download Results as CSV",
+            data=csv,
+            file_name=f"motif_results_{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
+            mime="text/csv"
         )
-    col_csv, col_excel = st.columns(2)
-    with col_csv:
-        csv_download_button(df, "Download Results as CSV")
-    with col_excel:
-        excel_download_button(df, "Download Results as Excel")
+        # Excel
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False)
+        st.download_button(
+            label="Download Results as Excel",
+            data=output.getvalue(),
+            file_name=f"motif_results_{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        st.info("PDF reporting coming soon! (Let me know if you need this now.)")
 
-# ---- Motif Map Visualization: Separate Lines for Each Motif Type ----
-with col_vis:
-    st.markdown("### 📍 Motif Map (Full Sequence)")
+# --- ABOUT PAGE ---
+elif page == "About":
+    st.header("About")
+    st.markdown("""
+    **Non-B DNA Motif Finder** is a tool for rapid detection and visualization of non-canonical DNA structures ("non-B DNA motifs") in sequences.
+    - Supports G-quadruplexes, triplexes, Z-DNA, cruciforms, bent DNA, and more.
+    - Accepts FASTA files or direct sequence input.
+    - Visualizes results and offers export options.
+    - Created for research, education, and bioinformatics.
+    """)
 
-    motif_types = sorted(set(r['Subtype'] for r in results))
-    color_palette = sns.color_palette('husl', n_colors=len(motif_types))
-    color_map = {typ: color_palette[i] for i, typ in enumerate(motif_types)}
-    y_map = {typ: i+1 for i, typ in enumerate(motif_types)}
+# --- CONTACT PAGE ---
+elif page == "Contact":
+    st.header("Contact")
+    st.markdown("""
+    For questions, bug reports, or feedback:
 
-    fig, ax = plt.subplots(figsize=(10, len(motif_types)*0.7+2))
-    for motif in results:
-        motif_type = motif['Subtype']
-        y = y_map[motif_type]
-        color = color_map[motif_type]
-        # Draw motif span as a thick line
-        ax.hlines(y, motif['Start'], motif['End'], color=color, linewidth=8, label=motif_type)
-    ax.set_yticks(list(y_map.values()))
-    ax.set_yticklabels(list(y_map.keys()))
-    ax.set_xlim(0, len(seq)+1)
-    ax.set_xlabel('Position on Sequence (bp)')
-    ax.set_title('Motif Map (Full Sequence)')
-    # Remove duplicate legend entries
-    handles, labels = ax.get_legend_handles_labels()
-    by_label = dict(zip(labels, handles))
-    # ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.0, 1.0)) # Can be uncommented if legend needed
-    sns.despine(left=False, bottom=False)
-    plt.tight_layout()
-    st.pyplot(fig)
+    - Email: [your_email@example.com](mailto:your_email@example.com)
+    - GitHub: [Non-B DNA Finder](https://github.com/VRYella/NonBDNAFinder)
+    - Developed by: Your Name
 
-# (The "Sequence (first 200bp, motifs highlighted)" section has been removed as requested.)
+    _Thank you for using Non-B DNA Motif Finder!_
+    """)
+
