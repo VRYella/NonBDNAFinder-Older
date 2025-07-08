@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 import numba
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 # --------------- MOTIF DATA ---------------
 MOTIF_INFO = [
@@ -157,10 +157,10 @@ def single_motif_search(args):
     return output
 
 def find_motifs(seq: str) -> list:
-    # Parallelized motif search (threading is fine for regex, as GIL released in re.finditer)
     args = [(motif_class, regex, name, seq) for motif_class, regex, name in MOTIFS]
     results = []
-    with ThreadPoolExecutor() as executor:
+    # Use processes to escape the Python GIL for true parallelism in regex (for large input)
+    with ProcessPoolExecutor() as executor:
         for out in executor.map(single_motif_search, args):
             results.extend(out)
     return results
