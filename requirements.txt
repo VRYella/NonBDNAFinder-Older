@@ -6,4 +6,3 @@ openpyxl
 seaborn
 plotly
 numba
-concurrent.futures
