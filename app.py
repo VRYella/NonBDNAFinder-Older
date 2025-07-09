@@ -179,7 +179,7 @@ page = st.sidebar.radio("Navigation", pages)
 
 if page == "Home":
     st.title("Non-B DNA Motif Finder (Accelerated)")
-    st.image("https://raw.githubusercontent.com/VRYella/NonBDNAFinder/main/nbd.PNG", use_column_width=True)
+    st.image("https://raw.githubusercontent.com/VRYella/NonBDNAFinder/main/nbd.PNG", use_container_width=True)
     st.markdown("**Ultra-fast detection and visualization of non-B DNA motifs, including G-quadruplexes, triplexes, Z-DNA, and more.**")
     st.subheader("Motif Explanations")
     for name, expl in MOTIF_INFO:
