@@ -166,7 +166,7 @@ pages = ["Home", "Upload & Analyze", "Results", "Visualization", "Download"]
 page = st.sidebar.radio("Navigation", pages)
 
 if page == "Home":
-    st.image("nbd.png", use_column_width=True)
+    st.image("nbd.PNG", use_container_width=True)
     st.markdown("""
     **Detects all major non-B DNA motifs (G4, i-motif, G-triplex, Z-DNA, IR, DR, APR/Bent DNA, Triplex/H-DNA) in FASTA or pasted sequence.**
     - Windowed engine: Suitable for large (Mb) genomic regions
