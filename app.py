@@ -284,7 +284,7 @@ GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 """
 
 st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
-st.image("nbd.png", use_column_width=True)
+st.image("nbd.PNG", use_column_width=True)
 
 st.title("Non-B DNA Motif Finder (FAST Modular Version)")
 st.markdown("Upload, paste or use the example FASTA. Detects: G4, i-Motif, G-Triplex, Sticky, APR/Bent, DR, IR, MR, STRs, Triplex, Z-DNA.")
