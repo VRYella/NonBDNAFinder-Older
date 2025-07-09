@@ -10,7 +10,7 @@ from datetime import datetime
 # --- LOGO ---
 def show_logo():
     try:
-        st.image("nbd.png", use_column_width=True)
+        st.image("nbd.PNG", use_column_width=True)
     except Exception:
         st.warning("Logo image not found. Please add nbd.png to your app directory.")
 
