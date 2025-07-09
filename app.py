@@ -1,387 +1,80 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import re
-import io
 import matplotlib.pyplot as plt
 import seaborn as sns
+import re, io
 from datetime import datetime
+from motifs import (
+    find_gquadruplex, find_imotif, find_gtriplex,
+    find_bipartite_gquadruplex, find_multimeric_gquadruplex,
+    find_zdna, find_hdna, find_sticky_dna,
+    find_slipped_dna, find_cruciform, find_bent_dna,
+    find_apr, find_mirror_repeat,
+    find_quadruplex_triplex_hybrid,
+    find_cruciform_triplex_junction,
+    find_g4_imotif_hybrid
+)
+from utils import parse_fasta, wrap
 
-# --- Utility functions ---
-def wrap(seq, width=60):
-    return "\n".join(seq[i:i+width] for i in range(0, len(seq), width))
-
-def reverse_complement(seq):
-    comp = str.maketrans("ATGC", "TACG")
-    return seq.translate(comp)[::-1]
-
-def parse_fasta(fasta_str):
-    lines = fasta_str.strip().splitlines()
-    seq = [line.strip() for line in lines if not line.startswith(">")]
-    return "".join(seq).upper().replace(" ", "").replace("U", "T")
-
-def gc_content(seq):
-    seq = seq.upper()
-    gc = seq.count("G") + seq.count("C")
-    return 100.0 * gc / max(1, len(seq))
-
-# --- Motif scoring functions ---
-def g4hunter_score(seq):
-    seq = seq.upper()
-    vals = []
-    i = 0
-    n = len(seq)
-    while i < n:
-        if seq[i] == 'G':
-            run_len = 1
-            while i + run_len < n and seq[i + run_len] == 'G':
-                run_len += 1
-            val = min(run_len, 4)
-            vals.extend([val] * run_len)
-            i += run_len
-        elif seq[i] == 'C':
-            run_len = 1
-            while i + run_len < n and seq[i + run_len] == 'C':
-                run_len += 1
-            val = -min(run_len, 4)
-            vals.extend([val] * run_len)
-            i += run_len
-        else:
-            vals.append(0)
-            i += 1
-    return round(np.mean(vals), 2) if vals else 0
-
-def z_seeker_score(seq):
-    # Number of alternating purine/pyrimidine dinucleotides
-    return len(re.findall(r'GC|CG|GT|TG|AC|CA', seq))
-
-def arm_score(arm):
-    return len(arm)
-
-# --- Motif finders (non-overlapping, longest-first) ---
-def find_gquadruplex(seq):
-    # G-quadruplex: (G3+N1-7)3G3+
-    pattern = r'(G{3,}[ATGC]{1,7}){3}G{3,}'
-    results = []
-    for m in re.finditer(pattern, seq):
-        region = seq[m.start():m.end()]
-        results.append(dict(
-            Class="Quadruplex",
-            Subtype="G-Quadruplex",
-            Start=m.start()+1,
-            End=m.end(),
-            Length=len(region),
-            Sequence=wrap(region),
-            GC=f"{gc_content(region):.1f}",
-            Score=g4hunter_score(region),
-            ScoreMethod="G4Hunter"
-        ))
-    return results
-
-def find_imotif(seq):
-    # i-Motif: (C3+N1-7)3C3+
-    pattern = r'(C{3,}[ATGC]{1,7}){3}C{3,}'
-    results = []
-    for m in re.finditer(pattern, seq):
-        region = seq[m.start():m.end()]
-        results.append(dict(
-            Class="Quadruplex",
-            Subtype="i-Motif",
-            Start=m.start()+1,
-            End=m.end(),
-            Length=len(region),
-            Sequence=wrap(region),
-            GC=f"{gc_content(region):.1f}",
-            Score=-g4hunter_score(region.replace("G", "C").replace("C", "G")), # flip for C
-            ScoreMethod="G4Hunter"
-        ))
-    return results
-
-def find_bipartite_g4(seq):
-    # Two G4s separated by <=100bp
-    pattern = r'(G{3,}[ATGC]{1,7}){3}G{3,}[ATGC]{0,100}(G{3,}[ATGC]{1,7}){3}G{3,}'
-    results = []
-    for m in re.finditer(pattern, seq):
-        region = seq[m.start():m.end()]
-        results.append(dict(
-            Class="Quadruplex",
-            Subtype="Bipartite_G-Quadruplex",
-            Start=m.start()+1,
-            End=m.end(),
-            Length=len(region),
-            Sequence=wrap(region),
-            GC=f"{gc_content(region):.1f}",
-            Score=g4hunter_score(region),
-            ScoreMethod="G4Hunter"
-        ))
-    return results
-
-def find_gtriplex(seq, g4_spans):
-    # Only report G-triplex if not overlapped with G4s
-    pattern = r'(G{3,}[ATGC]{1,7}){2}G{3,}'
-    results = []
-    for m in re.finditer(pattern, seq):
-        region = seq[m.start():m.end()]
-        # Overlap filter
-        s, e = m.start(), m.end()
-        overlaps_g4 = any((s < g4e and e > g4s) for g4s, g4e in g4_spans)
-        if not overlaps_g4:
-            results.append(dict(
-                Class="Quadruplex",
-                Subtype="G-Triplex",
-                Start=s+1,
-                End=e,
-                Length=len(region),
-                Sequence=wrap(region),
-                GC=f"{gc_content(region):.1f}",
-                Score=g4hunter_score(region) * 0.75,
-                ScoreMethod="G4Hunter scaled"
-            ))
-    return results
-
-def find_zdna(seq):
-    pattern = r'((?:GC|CG|GT|TG|AC|CA){6,})'
-    results = []
-    for m in re.finditer(pattern, seq):
-        region = seq[m.start():m.end()]
-        score = z_seeker_score(region)
-        results.append(dict(
-            Class="Z-DNA",
-            Subtype="Z-DNA",
-            Start=m.start()+1,
-            End=m.end(),
-            Length=len(region),
-            Sequence=wrap(region),
-            GC=f"{gc_content(region):.1f}",
-            Score=score,
-            ScoreMethod="Z-Seeker"
-        ))
-    return results
-
-def find_cruciform(seq):
-    results = []
-    n = len(seq)
-    for arm in range(6, 21):  # arms 6-20 bp for speed
-        for loop in range(0, 101):
-            pattern = rf"([ATGC]{{{arm}}})([ATGC]{{0,{loop}}})([ATGC]{{{arm}}})"
-            for m in re.finditer(pattern, seq):
-                left = m.group(1)
-                right = m.group(3)
-                if reverse_complement(left) == right:
-                    region = seq[m.start():m.end()]
-                    results.append(dict(
-                        Class="Inverted Repeat",
-                        Subtype="Cruciform_DNA",
-                        Start=m.start()+1,
-                        End=m.end(),
-                        Length=len(region),
-                        Sequence=wrap(region),
-                        GC=f"{gc_content(region):.1f}",
-                        Score=arm,
-                        ScoreMethod="Arm length"
-                    ))
-    return results
-
-def find_hdna(seq):
-    # Mirror repeats: ([AG]{10,}|[CT]{10,})([ATGC]{0,8})([AG]{10,}|[CT]{10,})
-    pattern = r'([AG]{10,}|[CT]{10,})([ATGC]{0,8})([AG]{10,}|[CT]{10,})'
-    results = []
-    for m in re.finditer(pattern, seq):
-        left, spacer, right = m.group(1), m.group(2), m.group(3)
-        if left == right[::-1] and len(left) >= 10 and len(right) >= 10:
-            region = seq[m.start():m.end()]
-            results.append(dict(
-                Class="Triplex",
-                Subtype="H-DNA",
-                Start=m.start()+1,
-                End=m.end(),
-                Length=len(region),
-                Sequence=wrap(region),
-                GC=f"{gc_content(region):.1f}",
-                Score="NA",
-                ScoreMethod="Mirror repeat"
-            ))
-    return results
-
-def find_sticky_dna(seq):
-    # (GAA)5+ or (TTC)5+
-    pattern = r'(?:GAA){5,}|(?:TTC){5,}'
-    results = []
-    for m in re.finditer(pattern, seq):
-        region = seq[m.start():m.end()]
-        results.append(dict(
-            Class="Triplex",
-            Subtype="Sticky_DNA",
-            Start=m.start()+1,
-            End=m.end(),
-            Length=len(region),
-            Sequence=wrap(region),
-            GC=f"{gc_content(region):.1f}",
-            Score=region.count("GAA")+region.count("TTC"),
-            ScoreMethod="Repeat count"
-        ))
-    return results
-
-def find_direct_repeats(seq):
-    # Unit length 10–300bp, spacer ≤100bp, no overlap
-    results = []
-    for unit_len in range(10, 31):  # 10–30 for speed; can increase to 300
-        pattern = rf'([ATGC]{{{unit_len}}})([ATGC]{{0,100}})\1'
-        for m in re.finditer(pattern, seq):
-            region = seq[m.start():m.end()]
-            results.append(dict(
-                Class="Direct Repeat",
-                Subtype="Slipped_DNA",
-                Start=m.start()+1,
-                End=m.end(),
-                Length=len(region),
-                Sequence=wrap(region),
-                GC=f"{gc_content(region):.1f}",
-                Score=unit_len,
-                ScoreMethod="Unit length"
-            ))
-    return results
-
-def find_mirror_repeats(seq):
-    # Arms 10bp+, loop ≤100bp
-    results = []
-    for arm in range(10, 21):
-        pattern = rf'([ATGC]{{{arm}}})([ATGC]{{0,100}})\1'
-        for m in re.finditer(pattern, seq):
-            left, loop, right = m.group(1), m.group(2), m.group(1)
-            if left == right[::-1]:
-                region = seq[m.start():m.end()]
-                results.append(dict(
-                    Class="Mirror Repeat",
-                    Subtype="Mirror_Repeat",
-                    Start=m.start()+1,
-                    End=m.end(),
-                    Length=len(region),
-                    Sequence=wrap(region),
-                    GC=f"{gc_content(region):.1f}",
-                    Score=arm,
-                    ScoreMethod="Arm length"
-                ))
-    return results
-
-def find_local_bends(seq):
-    # A-tracts (6–7), T-tracts (6–7)
-    pattern = r'A{6,7}|T{6,7}'
-    results = []
-    for m in re.finditer(pattern, seq):
-        region = seq[m.start():m.end()]
-        results.append(dict(
-            Class="Local Bend",
-            Subtype="A/T-tract",
-            Start=m.start()+1,
-            End=m.end(),
-            Length=len(region),
-            Sequence=wrap(region),
-            GC=f"{gc_content(region):.1f}",
-            Score="NA",
-            ScoreMethod="A/T-tract"
-        ))
-    return results
-
-def find_local_flexible(seq):
-    # CA or TG dinucleotide bends, 4+ repeats
-    pattern = r'(?:CA){4,}|(?:TG){4,}'
-    results = []
-    for m in re.finditer(pattern, seq):
-        region = seq[m.start():m.end()]
-        results.append(dict(
-            Class="Local Flexibility",
-            Subtype="CA/TG_dinucleotide",
-            Start=m.start()+1,
-            End=m.end(),
-            Length=len(region),
-            Sequence=wrap(region),
-            GC=f"{gc_content(region):.1f}",
-            Score="NA",
-            ScoreMethod="Dinucleotide"
-        ))
-    return results
-
-def find_str(seq):
-    # STR: unit 1-9bp, total len ≥10bp, at least 2 repeats
-    results = []
-    n = len(seq)
-    for unit_len in range(1, 10):
-        i = 0
-        while i < n - unit_len:
-            unit = seq[i:i+unit_len]
-            reps = 1
-            j = i + unit_len
-            while j + unit_len <= n and seq[j:j+unit_len] == unit:
-                reps += 1
-                j += unit_len
-            total_len = reps * unit_len
-            if reps >= 2 and total_len >= 10:
-                region = seq[i:j]
-                results.append(dict(
-                    Class="STR",
-                    Subtype=f"STR_{unit_len}bp",
-                    Start=i+1,
-                    End=j,
-                    Length=len(region),
-                    Sequence=wrap(region),
-                    GC=f"{gc_content(region):.1f}",
-                    Score=reps,
-                    ScoreMethod="Repeat count"
-                ))
-                i = j  # Skip overlapping
-            else:
-                i += 1
-    return results
-
-def collect_all_motifs(seq):
-    # Run all finders
-    g4 = find_gquadruplex(seq)
-    g4_spans = [(m['Start']-1, m['End']) for m in g4]
-    motifs = (
-        g4
-        + find_imotif(seq)
-        + find_bipartite_g4(seq)
-        + find_gtriplex(seq, g4_spans)
-        + find_zdna(seq)
-        + find_cruciform(seq)
-        + find_hdna(seq)
-        + find_sticky_dna(seq)
-        + find_direct_repeats(seq)
-        + find_mirror_repeats(seq)
-        + find_local_bends(seq)
-        + find_local_flexible(seq)
-        + find_str(seq)
-    )
-    # Non-overlapping, longest first
-    motifs.sort(key=lambda x: (x['Start'], -x['Length']))
-    mask = set()
-    nonoverlap = []
-    for m in motifs:
-        s, e = m['Start'], m['End']
-        if not any(i in mask for i in range(s, e+1)):
-            nonoverlap.append(m)
-            mask.update(range(s, e+1))
-    return nonoverlap
-
-# ----------- STREAMLIT APP -----------
 EXAMPLE_FASTA = """>Example
 ATCGATCGATCGAAAATTTTATTTAAATTTAAATTTGGGTTAGGGTTAGGGTTAGGGCCCCCTCCCCCTCCCCCTCCCC
 ATCGATCGCGCGCGCGATCGCACACACACAGCTGCTGCTGCTTGGGAAAGGGGAAGGGTTAGGGAAAGGGGTTT
 GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
-GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG"""
+GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
+"""
 
 st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
+
+if 'seq' not in st.session_state:
+    st.session_state['seq'] = ""
+if 'df' not in st.session_state:
+    st.session_state['df'] = pd.DataFrame()
+if 'motif_results' not in st.session_state:
+    st.session_state['motif_results'] = []
 
 PAGES = ["Home", "Upload & Analyze", "Results", "Visualization", "Download"]
 page = st.sidebar.radio("Navigation", PAGES)
 
+def collect_all_motifs(seq):
+    results = []
+    results += find_gquadruplex(seq)
+    results += find_imotif(seq)
+    results += find_gtriplex(seq)
+    results += find_bipartite_gquadruplex(seq)
+    results += find_multimeric_gquadruplex(seq)
+    results += find_zdna(seq)
+    results += find_hdna(seq)
+    results += find_sticky_dna(seq)
+    results += find_slipped_dna(seq)
+    results += find_cruciform(seq)
+    results += find_bent_dna(seq)
+    results += find_apr(seq)
+    results += find_mirror_repeat(seq)
+    results += find_quadruplex_triplex_hybrid(seq)
+    results += find_cruciform_triplex_junction(seq)
+    results += find_g4_imotif_hybrid(seq)
+    # Remove overlapping motifs (keep highest score if numeric)
+    results = sorted(results, key=lambda x: (x['Start'], -float(x['Score']) if str(x['Score']).replace('.','',1).isdigit() else 0))
+    nonoverlap = []
+    covered = set()
+    for r in results:
+        covered_range = set(range(r['Start'], r['End'] + 1))
+        if not covered_range & covered:
+            nonoverlap.append(r)
+            covered |= covered_range
+    return nonoverlap
+
 if page == "Home":
     st.title("Non-B DNA Motif Finder")
-    st.image("nbd.PNG", use_container_width=True)
+    try:
+        st.image("nbd.PNG", use_container_width=True)
+    except Exception:
+        st.warning("Logo image (nbd.PNG) not found. Place it in the app folder.")
+
     st.markdown("""
-    Comprehensive, fast, and reference-grade non-B DNA motif finder.  
-    **Motifs:** G-quadruplex, i-Motif, Bipartite G4, G-Triplex, Z-DNA (Z-Seeker), Cruciform, H-DNA, Sticky DNA, Direct/Mirror Repeats, STRs, local bends, flexible regions, and more.
+    **Comprehensive, fast, and reference-grade non-B DNA motif finder.**
+    - G-quadruplex, i-Motif, Bipartite G4, G-Triplex, Z-DNA (Z-Seeker), Cruciform, H-DNA, Sticky DNA, Direct/Mirror Repeats, STRs, local bends, flexible regions, and more.
+    - Export to CSV/Excel, motif visualization included.
     """)
 
 elif page == "Upload & Analyze":
@@ -428,7 +121,7 @@ elif page == "Results":
         st.info("No results yet. Go to 'Upload & Analyze' and run analysis.")
     else:
         st.markdown(f"**Sequence length:** {len(st.session_state['seq']):,} bp")
-        st.dataframe(df[['Class', 'Subtype', 'Start', 'End', 'Length', 'GC', 'ScoreMethod', 'Score', 'Sequence']],
+        st.dataframe(df[['Class', 'Subtype', 'Start', 'End', 'Length', 'Sequence', 'ScoreMethod', 'Score']],
             use_container_width=True, hide_index=True)
         with st.expander("Motif Class Summary"):
             motif_counts = df["Subtype"].value_counts().reset_index()
@@ -447,7 +140,6 @@ elif page == "Visualization":
         color_palette = sns.color_palette('husl', n_colors=len(motif_types))
         color_map = {typ: color_palette[i] for i, typ in enumerate(motif_types)}
         y_map = {typ: i+1 for i, typ in enumerate(motif_types)}
-
         fig, ax = plt.subplots(figsize=(10, len(motif_types)*0.7+2))
         for _, motif in df.iterrows():
             motif_type = motif['Subtype']
@@ -500,3 +192,8 @@ elif page == "Download":
             file_name=f"motif_results_{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+st.markdown("""
+---
+**Developed by [Your Name] & Team** | [GitHub](https://github.com/yourrepo)
+""")
