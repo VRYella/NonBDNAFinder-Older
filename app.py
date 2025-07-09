@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,20 +7,19 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 
-# --- Logo Handling ---
+# --- LOGO ---
 def show_logo():
     try:
         st.image("nbd.png", use_column_width=True)
     except Exception:
         st.warning("Logo image not found. Please add nbd.png to your app directory.")
 
-# --- FASTA Parsing ---
+# --- FASTA PARSER ---
 def parse_fasta(fasta_str: str) -> str:
     lines = fasta_str.strip().splitlines()
     seq = [line.strip() for line in lines if not line.startswith(">")]
     return "".join(seq).upper().replace(" ", "").replace("U", "T")
 
-# --- GC Content ---
 def gc_content(seq: str) -> float:
     seq = seq.upper()
     gc = seq.count("G") + seq.count("C")
@@ -30,7 +28,7 @@ def gc_content(seq: str) -> float:
 def wrap(seq: str, width=60) -> str:
     return "\n".join([seq[i:i+width] for i in range(0, len(seq), width)])
 
-# --- Motif Definitions ---
+# --- Motif Info ---
 MOTIF_INFO = [
     ("G-Quadruplex", "G-rich, four-stranded DNA, four runs of ≥3 Gs, loops 1–12 nt. [Bedrat 2016]"),
     ("i-Motif", "C-rich quadruplex, forms at low pH. [Abou Assi 2018]"),
@@ -51,19 +49,15 @@ MOTIF_INFO = [
     ("Local Curved Motif", "A6,7 or T6,7 tracts"),
 ]
 
-# --- Motif Regexes grouped by type ---
+# --- Motif Search Functions ---
 def gquadruplex_motifs(seq):
     motifs = []
-    # G4 canonical
     for m in re.finditer(r"(G{3,}[ATGC]{1,12}){3}G{3,}", seq):
         motifs.append(("Quadruplex", "G-Quadruplex", m.start()+1, m.end(), m.group()))
-    # Bipartite G4
     for m in re.finditer(r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(G{3,}[ATGC]{1,12}){3}G{3,}", seq):
         motifs.append(("Quadruplex", "Bipartite_G-Quadruplex", m.start()+1, m.end(), m.group()))
-    # G-Triplex
     for m in re.finditer(r"(G{3,}[ATGC]{1,12}){2}G{3,}", seq):
         motifs.append(("Quadruplex", "G-Triplex", m.start()+1, m.end(), m.group()))
-    # Multimeric G4
     for m in re.finditer(r"((G{3,}[ATGC]{1,12}){3}G{3,}([ATGC]{1,50}(G{3,}[ATGC]{1,12}){3}G{3,})+)", seq):
         motifs.append(("Quadruplex", "Multimeric_G-Quadruplex", m.start()+1, m.end(), m.group()))
     return motifs
@@ -85,7 +79,6 @@ def triplex_motifs(seq):
     # H-DNA: Mirror repeats (arms ≥10 bp, loop ≤8 bp)
     for m in re.finditer(r"([AG]{10,}|[CT]{10,})([ATGC]{0,8})([AG]{10,}|[CT]{10,})", seq):
         motifs.append(("Triplex", "H-DNA", m.start()+1, m.end(), m.group()))
-    # Sticky DNA (GAA/TTC) ≥5
     for m in re.finditer(r"(GAA){5,}|(TTC){5,}", seq):
         motifs.append(("Triplex", "Sticky_DNA", m.start()+1, m.end(), m.group()))
     return motifs
@@ -102,17 +95,25 @@ def repeat_motifs(seq):
 
 def str_motifs(seq):
     motifs = []
-    # STRs: repeat units 1–9 bp, total length ≥10 bp
+    # STRs: repeat units 1–9 bp, total length ≥10 bp (robust, no regex backref)
+    seq = seq.upper()
     for unit_len in range(1, 10):
-        pattern = fr"((?:[ATGC]{{{unit_len}}})\1{{1,}})"
-        for m in re.finditer(pattern, seq):
-            if len(m.group()) >= 10:
-                motifs.append(("STR", f"STR_{unit_len}bp", m.start()+1, m.end(), m.group()))
+        for i in range(len(seq) - unit_len*2 + 1):
+            unit = seq[i:i+unit_len]
+            if not re.match("^[ATGC]+$", unit):
+                continue
+            count = 1
+            j = i + unit_len
+            while seq[j:j+unit_len] == unit:
+                count += 1
+                j += unit_len
+            total_len = count * unit_len
+            if count > 1 and total_len >= 10:
+                motifs.append(("STR", f"STR_{unit_len}bp", i+1, i+total_len, seq[i:i+total_len]))
     return motifs
 
 def apr_motifs(seq):
     motifs = []
-    # APR (Bent DNA): at least 3 A-tracts (A{3,11}), ~10–11 nt spacing
     tract_positions = [m.start() for m in re.finditer(r"A{3,11}", seq)]
     for i in range(len(tract_positions) - 2):
         d1 = tract_positions[i+1] - tract_positions[i]
@@ -123,7 +124,6 @@ def apr_motifs(seq):
 
 def local_flex_motifs(seq):
     motifs = []
-    # CA or TG dinucleotide ≥4 repeats
     for m in re.finditer(r"(CA){4,}", seq):
         motifs.append(("Local Flexible Region", "CA Flexible", m.start()+1, m.end(), m.group()))
     for m in re.finditer(r"(TG){4,}", seq):
@@ -132,7 +132,6 @@ def local_flex_motifs(seq):
 
 def local_curve_motifs(seq):
     motifs = []
-    # A6,7 or T6,7
     for m in re.finditer(r"A{6,7}", seq):
         motifs.append(("Local Curved Motif", "A-Tract Curve", m.start()+1, m.end(), m.group()))
     for m in re.finditer(r"T{6,7}", seq):
@@ -141,18 +140,15 @@ def local_curve_motifs(seq):
 
 def hybrid_motifs(seq):
     motifs = []
-    # G4 + triplex overlap (hybrid)
     for m in re.finditer(r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}([AG]{10,}|[CT]{10,})", seq):
         motifs.append(("Quadruplex-Triplex Hybrid", "Quadruplex-Triplex_Hybrid", m.start()+1, m.end(), m.group()))
-    # Cruciform-triplex
     for m in re.finditer(r"([ATGC]{6,})([ATGC]{0,100})([ATGC]{6,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", seq):
         motifs.append(("Cruciform-Triplex Junction", "Cruciform-Triplex_Junctions", m.start()+1, m.end(), m.group()))
-    # G4+i-motif hybrid
     for m in re.finditer(r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(C{3,}[ATGC]{1,12}){3}C{3,}", seq):
         motifs.append(("G-Quadruplex_i-Motif_Hybrid", "G-Quadruplex_i-Motif_Hybrid", m.start()+1, m.end(), m.group()))
     return motifs
 
-# --- Motif Score/Propensity (motif-specific logic) ---
+# --- Motif Propensity ---
 def g4hunter_score(seq):
     vals = []
     n = len(seq)
@@ -212,7 +208,7 @@ def motif_propensity(motif_class, subtype, seq):
         return f"{len(seq)}bp"
     return "NA"
 
-# --- All Motif Search ---
+# --- Motif Search Master Function ---
 def find_motifs(seq):
     seq = seq.upper()
     found = []
@@ -241,15 +237,15 @@ def find_motifs(seq):
         })
     return found
 
-# --- Example Sequence (multiline FASTA) ---
+# --- Example Sequence ---
 EXAMPLE_FASTA = """>Example
 ATCGATCGATCGAAAATTTTATTTAAATTTAAATTTGGGTTAGGGTTAGGGTTAGGGCCCCCTCCCCCTCCCCCTCCCC
 ATCGATCGCGCGCGCGATCGCACACACACAGCTGCTGCTGCTTGGGAAAGGGGAAGGGTTAGGGAAAGGGGTTT
 GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
-GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
+GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
 """
 
-# --- Streamlit Multi-Page Layout ---
+# --- Streamlit Pages ---
 st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
 pages = ["Home", "Upload & Analyze", "Results", "Visualization", "Download", "About"]
 page = st.sidebar.radio("Navigation", pages)
@@ -328,7 +324,6 @@ elif page == "Visualization":
         color_palette = sns.color_palette('husl', n_colors=len(motif_types))
         color_map = {typ: color_palette[i] for i, typ in enumerate(motif_types)}
         y_map = {typ: i+1 for i, typ in enumerate(motif_types)}
-
         fig, ax = plt.subplots(figsize=(10, len(motif_types)*0.7+2))
         for _, motif in df.iterrows():
             motif_type = motif['Subtype']
@@ -386,10 +381,9 @@ elif page == "About":
     st.header("About")
     st.markdown("""
     **Non-B DNA Motif Finder** is a tool for rapid detection and visualization of non-canonical DNA structures ("non-B DNA motifs") in sequences.
-    - Supports G-quadruplexes, triplexes, Z-DNA, cruciforms, bent DNA, and more.
+    - Supports G-quadruplexes, triplexes, Z-DNA, cruciforms, bent DNA, STRs, and more.
     - Accepts FASTA files or direct sequence input.
     - Visualizes results and offers export options.
     - Created for research, education, and bioinformatics.
     """)
     st.markdown("**Developed by: Dr. V.R. Yella & A.S.C. Gummadi**")
-
