@@ -305,7 +305,6 @@ elif page == "About":
     st.header("About")
     st.markdown("""
     **Non-B DNA Motif Finder** is a tool for rapid detection and visualization of non-canonical DNA structures ("non-B DNA motifs") in sequences.
-    - Now with 10-100x faster performance using JIT and parallel motif search!
     - Supports G-quadruplexes, triplexes, Z-DNA, cruciforms, bent DNA, and more.
     - Accepts FASTA files or direct sequence input.
     - Visualizes results and offers export options.
@@ -319,7 +318,7 @@ elif page == "Contact":
 
     - Email: [your_email@example.com](mailto:your_email@example.com)
     - GitHub: [Non-B DNA Finder](https://github.com/VRYella/NonBDNAFinder)
-    - Developed by: Your Name
+    - Developed by: Dr. Venkata Rajesh Yella & Aruna Sesha Chandrika Gummadi
 
     _Thank you for using Non-B DNA Motif Finder!_
     """)
