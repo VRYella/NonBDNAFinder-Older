@@ -203,23 +203,32 @@ def find_slipped(seq):
             ))
     return matches
 
+def reverse_complement(seq):
+    comp = str.maketrans("ATGC", "TACG")
+    return seq.translate(comp)[::-1]
+
 def find_cruciform(seq):
     # Inverted repeats, arms ≥6bp, loop ≤100bp
     matches = []
-    for arm in range(6, 20):  # limit arms for performance, up to 20bp
+    n = len(seq)
+    for arm in range(6, 21):  # arms 6-20 bp for speed
         for loop in range(0, 101):
-            pattern = rf"([ATGC]{{{arm}}})([ATGC]{{0,{loop}}})(\1[::-1])"
+            pattern = rf"([ATGC]{{{arm}}})([ATGC]{{0,{loop}}})([ATGC]{{{arm}}})"
             for m in re.finditer(pattern, seq):
-                region = seq[m.start():m.end()]
-                matches.append(dict(
-                    Class="Inverted Repeat",
-                    Subtype="Cruciform_DNA",
-                    Start=m.start()+1, End=m.end(), Length=len(region),
-                    Sequence=wrap(region),
-                    ScoreMethod="Arm length",
-                    Reference="Pearson et al., 1996",
-                    Score=arm
-                ))
+                left = m.group(1)
+                right = m.group(3)
+                # Is right arm the reverse-complement of left?
+                if reverse_complement(left) == right:
+                    region = seq[m.start():m.end()]
+                    matches.append(dict(
+                        Class="Inverted Repeat",
+                        Subtype="Cruciform_DNA",
+                        Start=m.start()+1, End=m.end(), Length=len(region),
+                        Sequence=wrap(region),
+                        ScoreMethod="Arm length",
+                        Reference="Pearson et al., 1996",
+                        Score=arm
+                    ))
     return matches
 
 def find_apr(seq):
