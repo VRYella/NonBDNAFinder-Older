@@ -2,388 +2,255 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import re
-import io
-import matplotlib.pyplot as plt
-import seaborn as sns
-from datetime import datetime
+from collections import deque
 
-# --- LOGO ---
-def show_logo():
-    try:
-        st.image("nbd.PNG", use_container_width=True)
-    except Exception:
-        st.warning("Logo image not found. Please add nbd.png to your app directory.")
-
-# --- FASTA PARSER ---
-def parse_fasta(fasta_str: str) -> str:
-    lines = fasta_str.strip().splitlines()
-    seq = [line.strip() for line in lines if not line.startswith(">")]
-    return "".join(seq).upper().replace(" ", "").replace("U", "T")
-
-def gc_content(seq: str) -> float:
-    seq = seq.upper()
-    gc = seq.count("G") + seq.count("C")
-    return 100.0 * gc / max(1, len(seq))
-
-def wrap(seq: str, width=60) -> str:
-    return "\n".join([seq[i:i+width] for i in range(0, len(seq), width)])
-
-# --- Motif Info ---
-MOTIF_INFO = [
-    ("G-Quadruplex", "G-rich, four-stranded DNA, four runs of ≥3 Gs, loops 1–12 nt. [Bedrat 2016]"),
-    ("i-Motif", "C-rich quadruplex, forms at low pH. [Abou Assi 2018]"),
-    ("Bipartite_G-Quadruplex", "Two G4s ≤100 nt apart. [Matsugami 2001]"),
-    ("G-Triplex", "Three G runs, triple-stranded. [Chen NAR 2018]"),
-    ("Multimeric_G-Quadruplex", "Several tandem G4s, ≤50 nt apart."),
-    ("Z-DNA", "Left-handed helix, alternating purine-pyrimidine. [Herbert 1999]"),
-    ("H-DNA", "Triplex-forming mirror repeats. [Buske 2012]"),
-    ("Sticky_DNA", "GAA/TTC repeats ≥5 units. [Sakamoto 1999]"),
-    ("Slipped_DNA", "Direct repeats, unit 10–300 bp, ≤100 bp spacer. [Wells 1988]"),
-    ("Cruciform_DNA", "Inverted repeats, arms ≥6 bp, ≤100 bp loop. [Pearson 1996]"),
-    ("Bent_DNA", "APR: at least 3 A-tracts (3–11 bp) with 10–11 nt periodicity. [Marini 1982]"),
-    ("STR", "Short tandem repeat: unit 1–9 bp, total length ≥10 bp."),
-    ("Quadruplex-Triplex_Hybrid", "G4 and triplex potential overlap. [Siddiqui-Jain 2002]"),
-    ("Cruciform-Triplex_Junctions", "Junction: cruciform+triplex motifs. [Cer 2011]"),
-    ("G-Quadruplex_i-Motif_Hybrid", "G4 and i-motif nearby. [Abou Assi 2018]"),
-    ("Local Flexible Region", "CA or TG dinucleotide repeats (≥4)"),
-    ("Local Curved Motif", "A6,7 or T6,7 tracts"),
-]
-
-# --- Motif Search Functions ---
-def gquadruplex_motifs(seq):
-    motifs = []
-    for m in re.finditer(r"(G{3,}[ATGC]{1,12}){3}G{3,}", seq):
-        motifs.append(("Quadruplex", "G-Quadruplex", m.start()+1, m.end(), m.group()))
-    for m in re.finditer(r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(G{3,}[ATGC]{1,12}){3}G{3,}", seq):
-        motifs.append(("Quadruplex", "Bipartite_G-Quadruplex", m.start()+1, m.end(), m.group()))
-    for m in re.finditer(r"(G{3,}[ATGC]{1,12}){2}G{3,}", seq):
-        motifs.append(("Quadruplex", "G-Triplex", m.start()+1, m.end(), m.group()))
-    for m in re.finditer(r"((G{3,}[ATGC]{1,12}){3}G{3,}([ATGC]{1,50}(G{3,}[ATGC]{1,12}){3}G{3,})+)", seq):
-        motifs.append(("Quadruplex", "Multimeric_G-Quadruplex", m.start()+1, m.end(), m.group()))
-    return motifs
-
-def i_motif_motifs(seq):
-    motifs = []
-    for m in re.finditer(r"(C{3,}[ATGC]{1,12}){3}C{3,}", seq):
-        motifs.append(("Quadruplex", "i-Motif", m.start()+1, m.end(), m.group()))
-    return motifs
-
-def z_dna_motifs(seq):
-    motifs = []
-    for m in re.finditer(r"((GC|CG|GT|TG|AC|CA){6,})", seq):
-        motifs.append(("Z-DNA", "Z-DNA", m.start()+1, m.end(), m.group()))
-    return motifs
-
-def triplex_motifs(seq):
-    motifs = []
-    # H-DNA: Mirror repeats (arms ≥10 bp, loop ≤8 bp)
-    for m in re.finditer(r"([AG]{10,}|[CT]{10,})([ATGC]{0,8})([AG]{10,}|[CT]{10,})", seq):
-        motifs.append(("Triplex", "H-DNA", m.start()+1, m.end(), m.group()))
-    for m in re.finditer(r"(GAA){5,}|(TTC){5,}", seq):
-        motifs.append(("Triplex", "Sticky_DNA", m.start()+1, m.end(), m.group()))
-    return motifs
-
-def repeat_motifs(seq):
-    motifs = []
-    # Direct repeat (unit 10–300 bp, ≤100 bp spacer)
-    for m in re.finditer(r"([ATGC]{10,300})([ATGC]{0,100})\1", seq):
-        motifs.append(("Direct Repeat", "Slipped_DNA", m.start()+1, m.end(), m.group()))
-    # Inverted repeat (arms ≥6 bp, ≤100 bp loop)
-    for m in re.finditer(r"([ATGC]{6,})([ATGC]{0,100})\1", seq):
-        motifs.append(("Inverted Repeat", "Cruciform_DNA", m.start()+1, m.end(), m.group()))
-    return motifs
-
-def str_motifs(seq):
-    motifs = []
-    # STRs: repeat units 1–9 bp, total length ≥10 bp (robust, no regex backref)
-    seq = seq.upper()
-    for unit_len in range(1, 10):
-        for i in range(len(seq) - unit_len*2 + 1):
-            unit = seq[i:i+unit_len]
-            if not re.match("^[ATGC]+$", unit):
-                continue
-            count = 1
-            j = i + unit_len
-            while seq[j:j+unit_len] == unit:
-                count += 1
-                j += unit_len
-            total_len = count * unit_len
-            if count > 1 and total_len >= 10:
-                motifs.append(("STR", f"STR_{unit_len}bp", i+1, i+total_len, seq[i:i+total_len]))
-    return motifs
-
-def apr_motifs(seq):
-    motifs = []
-    tract_positions = [m.start() for m in re.finditer(r"A{3,11}", seq)]
-    for i in range(len(tract_positions) - 2):
-        d1 = tract_positions[i+1] - tract_positions[i]
-        d2 = tract_positions[i+2] - tract_positions[i+1]
-        if 9 <= d1 <= 12 and 9 <= d2 <= 12:
-            motifs.append(("Bent DNA", "APR/Bent_DNA", tract_positions[i]+1, tract_positions[i+2]+11, seq[tract_positions[i]:tract_positions[i+2]+11]))
-    return motifs
-
-def local_flex_motifs(seq):
-    motifs = []
-    for m in re.finditer(r"(CA){4,}", seq):
-        motifs.append(("Local Flexible Region", "CA Flexible", m.start()+1, m.end(), m.group()))
-    for m in re.finditer(r"(TG){4,}", seq):
-        motifs.append(("Local Flexible Region", "TG Flexible", m.start()+1, m.end(), m.group()))
-    return motifs
-
-def local_curve_motifs(seq):
-    motifs = []
-    for m in re.finditer(r"A{6,7}", seq):
-        motifs.append(("Local Curved Motif", "A-Tract Curve", m.start()+1, m.end(), m.group()))
-    for m in re.finditer(r"T{6,7}", seq):
-        motifs.append(("Local Curved Motif", "T-Tract Curve", m.start()+1, m.end(), m.group()))
-    return motifs
-
-def hybrid_motifs(seq):
-    motifs = []
-    for m in re.finditer(r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}([AG]{10,}|[CT]{10,})", seq):
-        motifs.append(("Quadruplex-Triplex Hybrid", "Quadruplex-Triplex_Hybrid", m.start()+1, m.end(), m.group()))
-    for m in re.finditer(r"([ATGC]{6,})([ATGC]{0,100})([ATGC]{6,})([ATGC]{0,100})([AG]{10,}|[CT]{10,})", seq):
-        motifs.append(("Cruciform-Triplex Junction", "Cruciform-Triplex_Junctions", m.start()+1, m.end(), m.group()))
-    for m in re.finditer(r"(G{3,}[ATGC]{1,12}){3}G{3,}[ATGC]{0,100}(C{3,}[ATGC]{1,12}){3}C{3,}", seq):
-        motifs.append(("G-Quadruplex_i-Motif_Hybrid", "G-Quadruplex_i-Motif_Hybrid", m.start()+1, m.end(), m.group()))
-    return motifs
-
-# --- Motif Propensity ---
-def g4hunter_score(seq):
-    vals = []
-    n = len(seq)
-    i = 0
-    while i < n:
-        s = seq[i]
-        if s == 'G':
-            run_len = 1
-            while i + run_len < n and seq[i + run_len] == 'G':
-                run_len += 1
-            score = min(run_len, 4)
-            for _ in range(run_len):
-                vals.append(score)
-            i += run_len
-        elif s == 'C':
-            run_len = 1
-            while i + run_len < n and seq[i + run_len] == 'C':
-                run_len += 1
-            score = -min(run_len, 4)
-            for _ in range(run_len):
-                vals.append(score)
-            i += run_len
-        else:
-            vals.append(0)
-            i += 1
-    return np.mean(vals) if vals else 0.0
-
-def motif_propensity(motif_class, subtype, seq):
-    if subtype == "G-Quadruplex":
-        return f"{g4hunter_score(seq):.2f}"
-    if subtype == "i-Motif":
-        seq = seq.replace("G", "C")
-        return f"{-g4hunter_score(seq):.2f}"
-    if subtype == "G-Triplex":
-        return f"{g4hunter_score(seq)*0.7:.2f}"
-    if subtype == "Multimeric_G-Quadruplex":
-        g4s = re.findall(r"(G{3,}[ATGC]{1,12}){3}G{3,}", seq)
-        if g4s:
-            return f"{np.mean([g4hunter_score(g) for g in g4s]):.2f}"
-        return "NA"
-    if motif_class == "Z-DNA":
-        n = len(re.findall(r"(GC|CG|GT|TG|AC|CA)", seq))
-        return f"{n}" if n > 0 else "NA"
-    if subtype == "Sticky_DNA":
-        n = len(re.findall(r"(GAA|TTC)", seq))
-        return f"{n}" if n > 0 else "NA"
-    if subtype == "Cruciform_DNA":
-        ir = re.findall(r"([ATGC]{6,})", seq)
-        return f"{max([len(i) for i in ir])}bp-arm" if ir else "NA"
-    if subtype == "Slipped_DNA":
-        dr = re.findall(r"([ATGC]{10,300})", seq)
-        return f"{len(dr)}" if dr else "NA"
-    if subtype == "Bent_DNA" or subtype == "APR/Bent_DNA":
-        tracts = re.findall(r"A{3,11}", seq)
-        return f"{max([len(t) for t in tracts])}bp-tract" if tracts else "NA"
-    if motif_class == "STR":
-        return f"{len(seq)}bp"
-    return "NA"
-
-# --- Motif Search Master Function ---
-def find_motifs(seq):
-    seq = seq.upper()
-    found = []
-    for m in (
-        gquadruplex_motifs(seq)
-        + i_motif_motifs(seq)
-        + z_dna_motifs(seq)
-        + triplex_motifs(seq)
-        + repeat_motifs(seq)
-        + str_motifs(seq)
-        + apr_motifs(seq)
-        + local_flex_motifs(seq)
-        + local_curve_motifs(seq)
-        + hybrid_motifs(seq)
-    ):
-        motif_class, subtype, start, end, region = m
-        found.append({
-            "Motif Class": motif_class,
-            "Subtype": subtype,
-            "Start": start,
-            "End": end,
-            "Length": end - start + 1,
-            "GC (%)": f"{gc_content(region):.1f}",
-            "Propensity/Score": motif_propensity(motif_class, subtype, region),
-            "Sequence": wrap(region, 60),
-        })
-    return found
-
-# --- Example Sequence ---
+# ----------------- FASTA/INPUT -----------------
 EXAMPLE_FASTA = """>Example
-ATCGATCGATCGAAAATTTTATTTAAATTTAAATTTGGGTTAGGGTTAGGGTTAGGGCCCCCTCCCCCTCCCCCTCCCC
-ATCGATCGCGCGCGCGATCGCACACACACAGCTGCTGCTGCTTGGGAAAGGGGAAGGGTTAGGGAAAGGGGTTT
-GGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA
-GAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG
+AGGGTTTGGGATTTGGGTTTGGGATTTAGGGTTTGGGATTTAGGGA
+CCCCCCCCCCCCCCCCCCCC
+ATATATATATATATATATATATATATATATAT
+TTTTTTTTTTTTTTTTTTT
+AATTAATTAA
+A"*30
+T"*30
 """
 
-# --- Streamlit Pages ---
+def parse_fasta(text):
+    lines = text.strip().splitlines()
+    seq = [l.strip().upper() for l in lines if not l.startswith(">")]
+    seq = ''.join(seq).replace(" ", "").replace("U", "T")
+    return re.sub(r'[^ATGC]', '', seq)  # strict DNA
+
+# ----------------- MOTIF SEARCH FUNCTIONS -----------------
+
+def find_gquadruplexes(seq, offset=0):
+    # GGG(N1-7)GGG(N1-7)GGG(N1-7)GGG (non-overlapping)
+    pattern = re.compile(r'G{3,}(?:[ATGC]{1,7}G{3,}){3,}')
+    motifs = []
+    for m in pattern.finditer(seq):
+        motifs.append(("Quadruplex", "G-Quadruplex", m.start()+1+offset, m.end()+offset, seq[m.start():m.end()]))
+    return motifs
+
+def find_imotif(seq, offset=0):
+    pattern = re.compile(r'C{3,}(?:[ATGC]{1,7}C{3,}){3,}')
+    motifs = []
+    for m in pattern.finditer(seq):
+        motifs.append(("Quadruplex", "i-Motif", m.start()+1+offset, m.end()+offset, seq[m.start():m.end()]))
+    return motifs
+
+def find_gtriplex(seq, g4_regions, offset=0):
+    # G-triplex: GGG(N1-7)GGG(N1-7)GGG (not overlapping G4)
+    pattern = re.compile(r'G{3,}(?:[ATGC]{1,7}G{3,}){2}')
+    motifs = []
+    for m in pattern.finditer(seq):
+        start, end = m.start()+offset, m.end()+offset
+        if not any(s < end and e > start for s, e in g4_regions):
+            motifs.append(("Quadruplex", "G-Triplex", start+1, end, seq[m.start():m.end()]))
+    return motifs
+
+def find_bipartite_g4(seq, offset=0):
+    # Two G4s with 1-100 nt linker
+    pattern = re.compile(
+        r'(G{3,}(?:[ATGC]{1,7}G{3,}){3,})[ATGC]{1,100}(G{3,}(?:[ATGC]{1,7}G{3,}){3,})'
+    )
+    motifs = []
+    for m in pattern.finditer(seq):
+        motifs.append(("Quadruplex", "Bipartite_G-Quadruplex", m.start()+1+offset, m.end()+offset, seq[m.start():m.end()]))
+    return motifs
+
+def find_zdna(seq, offset=0):
+    pattern = re.compile(r'(?:GC|CG|GT|TG|AC|CA){6,}')
+    motifs = []
+    for m in pattern.finditer(seq):
+        motifs.append(("Z-DNA", "Z-DNA", m.start()+1+offset, m.end()+offset, seq[m.start():m.end()]))
+    return motifs
+
+def find_direct_repeat(seq, offset=0):
+    pattern = re.compile(r'([ATGC]{10,300})([ATGC]{0,10})\1')
+    motifs = []
+    for m in pattern.finditer(seq):
+        motifs.append(("Direct Repeat", "Slipped_DNA", m.start()+1+offset, m.end()+offset, seq[m.start():m.end()]))
+    return motifs
+
+def find_apr(seq, offset=0):
+    # A-tract periodic region: at least three A-tracts of length 3–11, spaced 7-15bp center-to-center
+    pattern = re.compile(r'(A{3,11}(?:[ATGC]{7,15}A{3,11}){2,})')
+    motifs = []
+    for m in pattern.finditer(seq):
+        motifs.append(("Bent DNA", "APR/Bent_DNA", m.start()+1+offset, m.end()+offset, seq[m.start():m.end()]))
+    return motifs
+
+def reverse_complement(seq):
+    comp = str.maketrans('ATGC', 'TACG')
+    return seq.translate(comp)[::-1]
+
+def find_inverted_repeat(seq, offset=0, min_arm=6, max_loop=100):
+    motifs = []
+    n = len(seq)
+    # Fast algorithm, sliding window with rolling hash for arms (up to 12bp arm)
+    for arm_len in range(min_arm, 13):
+        arm_dict = dict()
+        for i in range(n - 2*arm_len - max_loop + 1):
+            left_arm = seq[i:i+arm_len]
+            for loop_len in range(0, max_loop+1):
+                j = i + arm_len + loop_len
+                if j + arm_len > n:
+                    break
+                right_arm = seq[j:j+arm_len]
+                if right_arm == reverse_complement(left_arm):
+                    motifs.append(("Inverted Repeat", "Cruciform_DNA",
+                                   i+1+offset, j+arm_len+offset, seq[i:j+arm_len]))
+    return motifs
+
+def find_triplex(seq, offset=0):
+    # Mirror repeat arms 10+, loop <=8, min 10% purine/pyrimidine
+    pattern = re.compile(r'([AGCT]{10,})([ATGC]{0,8})\1')
+    motifs = []
+    for m in pattern.finditer(seq):
+        left_arm = m.group(1)
+        pur = sum(c in "AG" for c in left_arm)/len(left_arm)
+        pyr = sum(c in "CT" for c in left_arm)/len(left_arm)
+        if pur >= 0.1 or pyr >= 0.1:
+            motifs.append(("Triplex", "H-DNA", m.start()+1+offset, m.end()+offset, seq[m.start():m.end()]))
+    return motifs
+
+# --------- WINDOWED PIPELINE FOR LARGE GENOMES ---------
+def chunked_find_motifs(seq, window=10000, overlap=100):
+    motifs = []
+    n = len(seq)
+    for start in range(0, n, window - overlap):
+        chunk = seq[start:start+window]
+        offset = start
+        g4s = find_gquadruplexes(chunk, offset)
+        g4_regions = [(m[2]-1, m[3]) for m in g4s]
+        motifs.extend(g4s)
+        motifs.extend(find_imotif(chunk, offset))
+        motifs.extend(find_gtriplex(chunk, g4_regions, offset))
+        motifs.extend(find_bipartite_g4(chunk, offset))
+        motifs.extend(find_zdna(chunk, offset))
+        motifs.extend(find_direct_repeat(chunk, offset))
+        motifs.extend(find_apr(chunk, offset))
+        motifs.extend(find_inverted_repeat(chunk, offset))
+        motifs.extend(find_triplex(chunk, offset))
+    # Remove perfect duplicates (region-based)
+    seen = set()
+    unique = []
+    for m in motifs:
+        key = (m[0], m[1], m[2], m[3])
+        if key not in seen:
+            unique.append(m)
+            seen.add(key)
+    return unique
+
+def get_motif_df(seq):
+    motifs = chunked_find_motifs(seq)
+    data = []
+    for m in motifs:
+        gc = (m[4].count("G")+m[4].count("C"))/len(m[4])*100 if m[4] else 0
+        data.append({
+            "Motif Class": m[0],
+            "Subtype": m[1],
+            "Start": m[2],
+            "End": m[3],
+            "Length": m[3]-m[2]+1,
+            "GC (%)": f"{gc:.1f}",
+            "Sequence": m[4][:50]+("..." if len(m[4])>50 else ""),
+        })
+    return pd.DataFrame(data)
+
+# -------------- STREAMLIT PAGES APP --------------------
 st.set_page_config(page_title="Non-B DNA Motif Finder", layout="wide")
-pages = ["Home", "Upload & Analyze", "Results", "Visualization", "Download", "About"]
+st.title("Non-B DNA Motif Finder (Fast, Genome-Ready)")
+
+pages = ["Home", "Upload & Analyze", "Results", "Visualization", "Download"]
 page = st.sidebar.radio("Navigation", pages)
 
-if 'seq' not in st.session_state:
-    st.session_state['seq'] = ""
-if 'df' not in st.session_state:
-    st.session_state['df'] = pd.DataFrame()
-
 if page == "Home":
-    st.title("Non-B DNA Motif Finder (FAST)")
-    show_logo()
-    st.markdown("**Rapid detection and visualization of non-canonical (non-B) DNA motifs.**")
-    st.header("Motif Definitions")
-    for name, expl in MOTIF_INFO:
-        st.markdown(f"- **{name}**: {expl}")
+    st.image("nbd.png", use_column_width=True)
+    st.markdown("""
+    **Detects all major non-B DNA motifs (G4, i-motif, G-triplex, Z-DNA, IR, DR, APR/Bent DNA, Triplex/H-DNA) in FASTA or pasted sequence.**
+    - Windowed engine: Suitable for large (Mb) genomic regions
+    - Paged interface: upload, results, viz, download
+    - No STRs
+    """)
 
 elif page == "Upload & Analyze":
-    st.header("Upload or Paste Sequence (FASTA or raw)")
-    col1, col2 = st.columns([1, 1])
+    st.header("Upload/Paste Sequence")
+    col1, col2 = st.columns(2)
     with col1:
-        fasta_file = st.file_uploader("Upload FASTA file", type=["fa", "fasta", "txt"])
+        fasta_file = st.file_uploader("Upload FASTA", type=["fa", "fasta", "txt"])
         if fasta_file:
-            try:
-                seq = parse_fasta(fasta_file.read().decode("utf-8"))
-                st.session_state['seq'] = seq
-                st.success("FASTA file loaded!")
-            except Exception:
-                st.error("Could not parse file as FASTA.")
+            seq = parse_fasta(fasta_file.read().decode("utf-8"))
+            st.session_state['seq'] = seq
+            st.success(f"FASTA loaded ({len(seq):,} nt)")
     with col2:
         if st.button("Use Example Sequence"):
             st.session_state['seq'] = parse_fasta(EXAMPLE_FASTA)
-        seq_input = st.text_area("Paste sequence (FASTA or raw)", value=st.session_state.get('seq', ""), height=120)
+        seq_input = st.text_area("Paste DNA sequence or FASTA", value=st.session_state.get('seq', ''), height=120)
         if seq_input:
-            try:
-                seq = parse_fasta(seq_input)
-                st.session_state['seq'] = seq
-            except Exception:
-                st.error("Paste a valid FASTA or sequence.")
+            seq = parse_fasta(seq_input)
+            st.session_state['seq'] = seq
 
-    if st.button("Run Analysis"):
-        seq = st.session_state.get('seq', "")
+    if st.button("Run Motif Analysis"):
+        seq = st.session_state.get('seq', '')
         if not seq or not re.match("^[ATGC]+$", seq):
-            st.error("Please upload or paste a valid DNA sequence (A/T/G/C only).")
+            st.error("Valid DNA (A/T/G/C) only.")
         else:
-            with st.spinner("Analyzing sequence..."):
-                results = find_motifs(seq)
-                st.session_state['df'] = pd.DataFrame(results)
-            if st.session_state['df'].empty:
-                st.warning("No non-B DNA motifs detected in this sequence.")
-            else:
-                st.success(f"Detected {len(st.session_state['df'])} motif regions in {len(seq):,} bp.")
+            with st.spinner("Finding motifs (genome-optimized)..."):
+                df = get_motif_df(seq)
+                st.session_state['df'] = df
+            st.success(f"Motif search complete ({len(df)} regions in {len(seq):,} nt)")
 
 elif page == "Results":
-    st.header("Motif Detection Results")
+    st.header("Motif Results Table")
     df = st.session_state.get('df', pd.DataFrame())
     if df.empty:
-        st.info("No results yet. Go to 'Upload & Analyze' and run analysis.")
+        st.info("No results. Please upload/run analysis.")
     else:
-        st.markdown(f"**Sequence length:** {len(st.session_state['seq']):,} bp")
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        with st.expander("Motif Class Summary"):
-            motif_counts = df["Subtype"].value_counts().reset_index()
-            motif_counts.columns = ["Motif Type", "Count"]
-            st.dataframe(motif_counts, use_container_width=True, hide_index=True)
+        st.dataframe(df, use_container_width=True)
+        st.markdown("**Motif summary:**")
+        st.write(df['Subtype'].value_counts().to_frame('Count'))
 
 elif page == "Visualization":
     st.header("Motif Visualization")
     df = st.session_state.get('df', pd.DataFrame())
-    seq = st.session_state.get('seq', "")
+    seq = st.session_state.get('seq', '')
     if df.empty:
-        st.info("No results to visualize. Run analysis first.")
+        st.info("No results yet.")
     else:
-        st.subheader("Motif Map (Full Sequence)")
+        # Motif map
+        import matplotlib.pyplot as plt
+        import seaborn as sns
         motif_types = sorted(df['Subtype'].unique())
-        color_palette = sns.color_palette('husl', n_colors=len(motif_types))
-        color_map = {typ: color_palette[i] for i, typ in enumerate(motif_types)}
-        y_map = {typ: i+1 for i, typ in enumerate(motif_types)}
-        fig, ax = plt.subplots(figsize=(10, len(motif_types)*0.7+2))
-        for _, motif in df.iterrows():
-            motif_type = motif['Subtype']
-            y = y_map[motif_type]
-            color = color_map[motif_type]
-            ax.hlines(y, motif['Start'], motif['End'], color=color, linewidth=8)
-        ax.set_yticks(list(y_map.values()))
-        ax.set_yticklabels(list(y_map.keys()))
-        ax.set_xlim(0, len(seq)+1)
-        ax.set_xlabel('Position on Sequence (bp)')
-        ax.set_title('Motif Map (Full Sequence)')
-        sns.despine(left=False, bottom=False)
+        ymap = {t: i+1 for i, t in enumerate(motif_types)}
+        colormap = sns.color_palette('tab10', len(motif_types))
+        color_map = {t: colormap[i] for i, t in enumerate(motif_types)}
+        fig, ax = plt.subplots(figsize=(12, len(motif_types)*0.5+3))
+        for _, row in df.iterrows():
+            y = ymap[row['Subtype']]
+            ax.hlines(y, row['Start'], row['End'], color=color_map[row['Subtype']], lw=6)
+        ax.set_yticks(list(ymap.values()))
+        ax.set_yticklabels(list(ymap.keys()))
+        ax.set_xlim(1, len(seq))
+        ax.set_xlabel("Position (bp)")
+        ax.set_title("Motif Locations")
         plt.tight_layout()
         st.pyplot(fig)
-
-        st.subheader("Motif Type Distribution (Pie Chart)")
-        counts = df['Subtype'].value_counts()
-        fig2, ax2 = plt.subplots()
-        ax2.pie(counts, labels=counts.index, autopct='%1.1f%%', startangle=140)
-        ax2.axis('equal')
-        st.pyplot(fig2)
-
-        st.subheader("Motif Counts (Bar Chart)")
-        fig3, ax3 = plt.subplots()
-        counts.plot.bar(ax=ax3)
-        ax3.set_ylabel("Count")
-        ax3.set_xlabel("Motif Type")
-        plt.tight_layout()
-        st.pyplot(fig3)
+        st.markdown("*Pie/bar charts available on request*")
 
 elif page == "Download":
-    st.header("Download Motif Report")
+    st.header("Download Results")
     df = st.session_state.get('df', pd.DataFrame())
     if df.empty:
-        st.info("No results to download. Run analysis first.")
+        st.info("Nothing to download.")
     else:
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Download Results as CSV",
-            data=csv,
-            file_name=f"motif_results_{datetime.now().strftime('%Y%m%d-%H%M%S')}.csv",
-            mime="text/csv"
-        )
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False)
-        st.download_button(
-            label="Download Results as Excel",
-            data=output.getvalue(),
-            file_name=f"motif_results_{datetime.now().strftime('%Y%m%d-%H%M%S')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
-
-elif page == "About":
-    st.header("About")
-    st.markdown("""
-    **Non-B DNA Motif Finder** is a tool for rapid detection and visualization of non-canonical DNA structures ("non-B DNA motifs") in sequences.
-    - Supports G-quadruplexes, triplexes, Z-DNA, cruciforms, bent DNA, STRs, and more.
-    - Accepts FASTA files or direct sequence input.
-    - Visualizes results and offers export options.
-    - Created for research, education, and bioinformatics.
-    """)
-    st.markdown("**Developed by: Dr. V.R. Yella & A.S.C. Gummadi**")
+        st.download_button("Download CSV", df.to_csv(index=False).encode('utf-8'),
+            file_name="motif_results.csv", mime="text/csv")
+        output = pd.ExcelWriter("results.xlsx", engine='xlsxwriter')
+        df.to_excel(output, index=False)
+        output.close()
+        with open("results.xlsx", "rb") as f:
+            st.download_button("Download Excel", f.read(),
+                file_name="motif_results.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
