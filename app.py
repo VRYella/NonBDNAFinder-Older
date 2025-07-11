@@ -177,10 +177,10 @@ def find_polyG(seq):
 def all_motifs(seq):
     """Find all motifs in sequence"""
     motif_funcs = [
-        find_gquadruplex, find_relaxed_gquadruplex, find_bulged_gquadruplex,
-        find_imotif, find_gtriplex, find_bipartite_gquadruplex, find_multimeric_gquadruplex,
-        find_zdna, find_simple_motifs, find_quadruplex_triplex_hybrid, 
-        find_cruciform_triplex_junction, find_g4_imotif_hybrid, find_polyG, find_local_bent
+    find_gquadruplex, find_relaxed_gquadruplex, find_bulged_gquadruplex,
+    find_imotif, find_gtriplex, find_bipartite_gquadruplex, find_multimeric_gquadruplex,
+    find_zdna, find_simple_motifs, find_quadruplex_triplex_hybrid, 
+    find_cruciform_triplex_junction, find_g4_imotif_hybrid, find_polyG, find_local_bent
     ]
     return [hit for func in motif_funcs for hit in func(seq)]
 
