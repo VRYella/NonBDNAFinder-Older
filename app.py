@@ -1,6 +1,7 @@
-# ----------------------
+# ======================
 # utils.py
-# ----------------------
+# ======================
+
 import re
 import numpy as np
 
@@ -51,10 +52,9 @@ def zseeker_score(seq: str) -> float:
     dinucs = re.findall(r"(GC|CG|GT|TG|AC|CA)", seq)
     return len(dinucs) / (len(seq)/2) if len(seq) >= 2 else 0.0
 
-
-# ----------------------
-# motifs.py (cleaned)
-# ----------------------
+# ======================
+# motifs.py
+# ======================
 import re
 
 def non_overlapping_finditer(pattern, seq):
@@ -177,10 +177,10 @@ def find_polyG(seq):
 def all_motifs(seq):
     """Find all motifs in sequence"""
     motif_funcs = [
-    find_gquadruplex, find_relaxed_gquadruplex, find_bulged_gquadruplex,
-    find_imotif, find_gtriplex, find_bipartite_gquadruplex, find_multimeric_gquadruplex,
-    find_zdna, find_simple_motifs, find_quadruplex_triplex_hybrid, 
-    find_cruciform_triplex_junction, find_g4_imotif_hybrid, find_polyG, find_local_bent
+        find_gquadruplex, find_relaxed_gquadruplex, find_bulged_gquadruplex,
+        find_imotif, find_gtriplex, find_bipartite_gquadruplex, find_multimeric_gquadruplex,
+        find_zdna, find_simple_motifs, find_quadruplex_triplex_hybrid, 
+        find_cruciform_triplex_junction, find_g4_imotif_hybrid, find_polyG, find_local_bent
     ]
     return [hit for func in motif_funcs for hit in func(seq)]
 
@@ -197,9 +197,9 @@ def find_hotspots(seq, motif_hits, window=100, min_count=3):
     
     return list(hotspots.values())
 
-# ----------------------
-# app.py (cleaned)
-# ----------------------
+# ======================
+# app.py
+# ======================
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -698,4 +698,3 @@ elif page == "Motif Definitions Glossary":
     - Results may show fewer total motifs compared to overlapping methods
     - More accurately represents biological motif distribution
     """)
-
