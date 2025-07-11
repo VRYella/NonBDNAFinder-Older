@@ -53,10 +53,9 @@ def zseeker_score(seq: str) -> float:
 
 
 # ----------------------
-# motifs.py
+# motifs.py (cleaned)
 # ----------------------
 import re
-from utils import wrap, gc_content, reverse_complement, g4hunter_score, zseeker_score
 
 def non_overlapping_finditer(pattern, seq):
     """Find non-overlapping matches"""
@@ -198,9 +197,8 @@ def find_hotspots(seq, motif_hits, window=100, min_count=3):
     
     return list(hotspots.values())
 
-
 # ----------------------
-# app.py
+# app.py (cleaned)
 # ----------------------
 import streamlit as st
 import pandas as pd
@@ -208,13 +206,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import re, io
 from datetime import datetime
-from motifs import (
     all_motifs,
     find_gquadruplex, find_relaxed_gquadruplex, find_bulged_gquadruplex, find_gtriplex,
     find_bipartite_gquadruplex, find_multimeric_gquadruplex,
     find_imotif, find_hotspots
 )
-from utils import parse_fasta, wrap
 
 EXAMPLE_FASTA = ">Example\nATCGATCGATCGAAAATTTTATTTAAATTTAAATTTGGGTTAGGGTTAGGGTTAGGGCCCCCTCCCCCTCCCCCTCCCC\nATCGATCGCGCGCGCGATCGCACACACACAGCTGCTGCTGCTTGGGAAAGGGGAAGGGTTAGGGAAAGGGGTTT\nGGGTTTAGGGGGGAGGGGCTGCTGCTGCATGCGGGAAGGGAGGGTAGAGGGTCCGGTAGGAACCCCTAACCCCTAA\nGAAAGAAGAAGAAGAAGAAGAAAGGAAGGAAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGAGGG"
 
@@ -702,5 +698,4 @@ elif page == "Motif Definitions Glossary":
     - Results may show fewer total motifs compared to overlapping methods
     - More accurately represents biological motif distribution
     """)
-
 
