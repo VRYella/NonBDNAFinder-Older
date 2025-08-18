@@ -393,7 +393,7 @@ if page == "Main Analysis":
     current_step += 1
     progress_bar.progress(current_step / total_steps)
     
-    motifs += find_motif(sequence_input, r"[AC]{4,}.{1,7}[AC]{4,}.{1,7}[AC]{4,}", "i-Motif Family", "AC-motif", "i-motif_Score", imotif_score)
+    motifs += find_motif(sequence_input, r"(A{3,}[ACGT]{6}C{3,}[ACGT]{6}C{3,}[ACGT]{6}C{3,})|(C{3,}[ACGT]{6}C{3,}[ACGT]{6}C{3,}[ACGT]{6}A{3,})", "i-Motif Family", "AC-motif", "i-motif_Score", imotif_score)
     current_step += 1
     progress_bar.progress(current_step / total_steps)
     
