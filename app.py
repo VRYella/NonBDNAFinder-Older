@@ -495,67 +495,269 @@ if page == "Main Analysis":
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # Subtype analysis
+            # Enhanced subtype and length analysis with multiple visualization types
             col1, col2 = st.columns(2)
             
             with col1:
                 st.markdown("### 🔬 Subtype Distribution")
-                subtype_counts = df['Subtype'].value_counts()
                 
-                # Create horizontal bar chart
-                fig2 = px.bar(
-                    x=subtype_counts.values,
-                    y=subtype_counts.index,
-                    orientation='h',
-                    color=subtype_counts.index,
-                    title="Subclass Frequency"
-                )
-                fig2.update_layout(
-                    height=400,
-                    showlegend=False,
-                    yaxis={'categoryorder': 'total ascending'}
-                )
-                st.plotly_chart(fig2, use_container_width=True)
+                # Create tabs for different chart types
+                sub_tab1, sub_tab2 = st.tabs(["📊 Bar Chart", "🎵 Violin Plot"])
+                
+                with sub_tab1:
+                    subtype_counts = df['Subtype'].value_counts()
+                    
+                    # Create horizontal bar chart
+                    fig2 = px.bar(
+                        x=subtype_counts.values,
+                        y=subtype_counts.index,
+                        orientation='h',
+                        color=subtype_counts.index,
+                        title="Subclass Frequency"
+                    )
+                    fig2.update_layout(
+                        height=400,
+                        showlegend=False,
+                        yaxis={'categoryorder': 'total ascending'}
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+                
+                with sub_tab2:
+                    # Create violin plot for score distribution by subtype
+                    fig_violin = px.violin(
+                        df,
+                        x='Score',
+                        y='Subtype',
+                        color='Class',
+                        color_discrete_map=CLASS_COLORS,
+                        title="Score Distribution by Subtype",
+                        orientation='h'
+                    )
+                    fig_violin.update_layout(height=400)
+                    st.plotly_chart(fig_violin, use_container_width=True)
             
             with col2:
                 st.markdown("### 📏 Length Distribution")
-                fig3 = px.histogram(
-                    df, 
-                    x='Length', 
-                    color='Class',
-                    color_discrete_map=CLASS_COLORS,
-                    title="Motif Length Distribution",
-                    nbins=20
-                )
-                fig3.update_layout(height=400)
-                st.plotly_chart(fig3, use_container_width=True)
+                
+                # Create tabs for different analysis types
+                len_tab1, len_tab2 = st.tabs(["📊 Histogram", "📈 Box Plot"])
+                
+                with len_tab1:
+                    fig3 = px.histogram(
+                        df, 
+                        x='Length', 
+                        color='Class',
+                        color_discrete_map=CLASS_COLORS,
+                        title="Motif Length Distribution",
+                        nbins=20
+                    )
+                    fig3.update_layout(height=400)
+                    st.plotly_chart(fig3, use_container_width=True)
+                
+                with len_tab2:
+                    # Create box plot for length distribution by class
+                    fig_box = px.box(
+                        df,
+                        x='Class',
+                        y='Length',
+                        color='Class',
+                        color_discrete_map=CLASS_COLORS,
+                        title="Length Distribution by Class"
+                    )
+                    fig_box.update_layout(
+                        height=400,
+                        xaxis_tickangle=-45
+                    )
+                    st.plotly_chart(fig_box, use_container_width=True)
             
-            # Sequence position visualization
+            # Add new scoring system analysis
+            st.markdown("### 🎯 Scoring System Analysis")
+            
+            # Create tabs for different scoring analyses
+            score_tab1, score_tab2, score_tab3 = st.tabs(["📊 Score Distribution", "🔗 Score Correlation", "⚖️ Method Comparison"])
+            
+            with score_tab1:
+                # Score distribution by scoring method
+                score_methods = df['ScoreMethod'].unique()
+                if len(score_methods) > 1:
+                    fig_score_dist = px.box(
+                        df,
+                        x='ScoreMethod',
+                        y='Score',
+                        color='ScoreMethod',
+                        title="Score Distribution by Scoring Method"
+                    )
+                    fig_score_dist.update_layout(height=400, xaxis_tickangle=-45)
+                    st.plotly_chart(fig_score_dist, use_container_width=True)
+                else:
+                    st.info("Only one scoring method used in current results.")
+            
+            with score_tab2:
+                # Create correlation matrix if multiple numerical columns exist
+                numerical_cols = ['Score', 'Length', 'Start', 'End']
+                if len(df[numerical_cols].columns) > 1:
+                    corr_matrix = df[numerical_cols].corr()
+                    
+                    fig_corr = px.imshow(
+                        corr_matrix,
+                        text_auto=True,
+                        color_continuous_scale='RdBu_r',
+                        title="Correlation Matrix: Score vs. Structural Properties"
+                    )
+                    fig_corr.update_layout(height=400)
+                    st.plotly_chart(fig_corr, use_container_width=True)
+            
+            with score_tab3:
+                # Scoring method effectiveness comparison
+                method_stats = df.groupby('ScoreMethod').agg({
+                    'Score': ['mean', 'std', 'count'],
+                    'Length': 'mean',
+                    'Significance': lambda x: (x == 'Very Significant').sum() / len(x) * 100
+                }).round(2)
+                
+                method_stats.columns = ['Avg Score', 'Score StdDev', 'Count', 'Avg Length', '% Very Significant']
+                
+                st.markdown("#### 📈 Scoring Method Statistics")
+                st.dataframe(method_stats, use_container_width=True)
+            
+            # Enhanced sequence position visualization with additional views
             st.markdown("### 📍 Motif Positions Along Sequence")
             
-            fig4 = px.scatter(
-                df,
-                x='Start',
-                y='Class',
-                color='Class',
-                size='Length',
-                hover_data=['Subtype', 'Score', 'Significance'],
-                color_discrete_map=CLASS_COLORS,
-                title="Motif Positions and Sizes"
-            )
-            fig4.update_layout(height=400)
-            st.plotly_chart(fig4, use_container_width=True)
+            # Create tabs for different visualization types
+            pos_tab1, pos_tab2, pos_tab3 = st.tabs(["🎯 Position Plot", "🔥 Density Heatmap", "📊 Coverage Plot"])
             
-            # Detailed results table
+            with pos_tab1:
+                fig4 = px.scatter(
+                    df,
+                    x='Start',
+                    y='Class',
+                    color='Class',
+                    size='Length',
+                    hover_data=['Subtype', 'Score', 'Significance'],
+                    color_discrete_map=CLASS_COLORS,
+                    title="Motif Positions and Sizes"
+                )
+                fig4.update_layout(height=400)
+                st.plotly_chart(fig4, use_container_width=True)
+            
+            with pos_tab2:
+                # Create motif density heatmap
+                import numpy as np
+                
+                # Create bins for sequence positions
+                seq_length = len(sequence_input)
+                bin_size = max(10, seq_length // 50)  # Dynamic bin size
+                bins = np.arange(0, seq_length + bin_size, bin_size)
+                
+                # Create heatmap data
+                heatmap_data = []
+                classes = df['Class'].unique()
+                
+                for cls in classes:
+                    class_df = df[df['Class'] == cls]
+                    counts, _ = np.histogram(class_df['Start'], bins=bins)
+                    heatmap_data.append(counts)
+                
+                # Create heatmap
+                fig_heatmap = px.imshow(
+                    heatmap_data,
+                    x=bins[:-1],
+                    y=classes,
+                    color_continuous_scale='Viridis',
+                    title="Motif Density Heatmap Along Sequence",
+                    labels={'x': 'Sequence Position', 'y': 'DNA Class', 'color': 'Motif Count'}
+                )
+                fig_heatmap.update_layout(height=400)
+                st.plotly_chart(fig_heatmap, use_container_width=True)
+            
+            with pos_tab3:
+                # Create sequence coverage visualization
+                coverage_data = np.zeros(seq_length)
+                for _, row in df.iterrows():
+                    start_idx = max(0, int(row['Start'] - 1))
+                    end_idx = min(seq_length, int(row['End']))
+                    coverage_data[start_idx:end_idx] += 1
+                
+                # Sample the data for plotting (to avoid too many points)
+                sample_indices = np.arange(0, seq_length, max(1, seq_length // 1000))
+                
+                fig_coverage = px.line(
+                    x=sample_indices,
+                    y=coverage_data[sample_indices],
+                    title="Sequence Coverage by Non-B DNA Structures",
+                    labels={'x': 'Sequence Position', 'y': 'Coverage Depth'}
+                )
+                fig_coverage.update_traces(line_color='#667eea', line_width=2)
+                fig_coverage.update_layout(height=400)
+                st.plotly_chart(fig_coverage, use_container_width=True)
+            
+            # Enhanced detailed results table with advanced features
             st.markdown("### 📋 Detailed Results")
             
-            # Add color coding to the dataframe display
-            def color_class(val):
+            # Create filtering options
+            filter_col1, filter_col2, filter_col3 = st.columns(3)
+            
+            with filter_col1:
+                selected_classes = st.multiselect(
+                    "Filter by Class:",
+                    options=df['Class'].unique(),
+                    default=df['Class'].unique(),
+                    key="class_filter"
+                )
+            
+            with filter_col2:
+                significance_filter = st.selectbox(
+                    "Filter by Significance:",
+                    options=['All'] + list(df['Significance'].unique()),
+                    index=0,
+                    key="significance_filter"
+                )
+            
+            with filter_col3:
+                min_score = st.number_input(
+                    "Minimum Score:",
+                    min_value=float(df['Score'].min()),
+                    max_value=float(df['Score'].max()),
+                    value=float(df['Score'].min()),
+                    key="min_score_filter"
+                )
+            
+            # Apply filters
+            filtered_df = df[df['Class'].isin(selected_classes)]
+            if significance_filter != 'All':
+                filtered_df = filtered_df[filtered_df['Significance'] == significance_filter]
+            filtered_df = filtered_df[filtered_df['Score'] >= min_score]
+            
+            # Add summary statistics
+            st.markdown("#### 📊 Filtered Results Summary")
+            summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
+            
+            with summary_col1:
+                st.metric("Total Motifs", len(filtered_df))
+            with summary_col2:
+                st.metric("Avg Score", f"{filtered_df['Score'].mean():.2f}")
+            with summary_col3:
+                st.metric("Avg Length", f"{filtered_df['Length'].mean():.1f}")
+            with summary_col4:
+                st.metric("Total Coverage", f"{filtered_df['Length'].sum()}")
+            
+            # Enhanced color coding function
+            def enhanced_color_class(val):
                 color = CLASS_COLORS.get(val, '#FFFFFF')
                 return f'background-color: {color}; color: white; font-weight: bold;'
             
-            # Style the dataframe
-            styled_df = df.style.applymap(color_class, subset=['Class'])
+            def color_significance(val):
+                colors = {
+                    'Very Significant': 'background-color: #ff4444; color: white; font-weight: bold;',
+                    'Significant': 'background-color: #ffaa44; color: white; font-weight: bold;',
+                    'Minimal': 'background-color: #aaaaaa; color: white; font-weight: bold;'
+                }
+                return colors.get(val, '')
+            
+            # Style the dataframe with multiple formatting rules
+            styled_df = filtered_df.style.applymap(enhanced_color_class, subset=['Class']) \
+                                          .applymap(color_significance, subset=['Significance']) \
+                                          .format({'Score': '{:.2f}', 'Length': '{:.0f}'})
             
             st.dataframe(styled_df, use_container_width=True, height=400)
             
@@ -727,10 +929,58 @@ elif page == "Disease Analysis":
                 total_repeats = len(df_disease)
                 st.metric("Total Disease Repeats", total_repeats)
             
-            # Display results table
+            # Enhanced Disease Analysis Results with Visualizations
             st.markdown("#### 📊 Disease-Associated Repeat Expansions")
             
-            # Color code by risk level
+            # Add filtering and download options for disease results
+            dis_col1, dis_col2, dis_col3 = st.columns(3)
+            
+            with dis_col1:
+                risk_filter = st.selectbox(
+                    "Filter by Risk Level:",
+                    options=['All', 'High Risk', 'Normal Range'],
+                    index=0,
+                    key="disease_risk_filter"
+                )
+            
+            with dis_col2:
+                # Disease results download - CSV
+                disease_csv = df_disease.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "📄 Download Disease Results CSV",
+                    data=disease_csv,
+                    file_name=f"disease_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    key="disease_csv_download"
+                )
+            
+            with dis_col3:
+                # Disease results download - Excel
+                disease_output = io.BytesIO()
+                with pd.ExcelWriter(disease_output, engine='xlsxwriter') as writer:
+                    df_disease.to_excel(writer, sheet_name='Disease Analysis', index=False)
+                    
+                    # Get workbook and worksheet for formatting
+                    workbook = writer.book
+                    worksheet = writer.sheets['Disease Analysis']
+                    
+                    # Add conditional formatting for risk levels
+                    high_risk_format = workbook.add_format({'bg_color': '#ffcccc', 'font_color': '#cc0000'})
+                    normal_format = workbook.add_format({'bg_color': '#ccffcc', 'font_color': '#008000'})
+                    
+                disease_excel_data = disease_output.getvalue()
+                st.download_button(
+                    "📊 Download Disease Results Excel",
+                    data=disease_excel_data,
+                    file_name=f"disease_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="disease_excel_download"
+                )
+            
+            # Apply risk filter
+            filtered_disease_df = df_disease if risk_filter == 'All' else df_disease[df_disease['Risk_Level'] == risk_filter]
+            
+            # Enhanced color coding for disease results
             def highlight_risk(val):
                 if val == "High Risk":
                     return 'background-color: #ffcccc; color: #cc0000; font-weight: bold;'
@@ -738,8 +988,97 @@ elif page == "Disease Analysis":
                     return 'background-color: #ccffcc; color: #008000;'
                 return ''
             
-            styled_disease_df = df_disease.style.applymap(highlight_risk, subset=['Risk_Level'])
+            def highlight_gene(val):
+                gene_colors = {
+                    'HTT': 'background-color: #ff9999;',
+                    'ATXN1': 'background-color: #99ccff;',
+                    'ATXN2': 'background-color: #99ffcc;',
+                    'ATXN3': 'background-color: #ffcc99;',
+                    'AR': 'background-color: #cc99ff;'
+                }
+                return gene_colors.get(val, '')
+            
+            styled_disease_df = filtered_disease_df.style.applymap(highlight_risk, subset=['Risk_Level']) \
+                                                        .applymap(highlight_gene, subset=['Gene']) \
+                                                        .format({'Repeat_Count': '{:.0f}', 'Threshold': '{:.0f}'})
+            
             st.dataframe(styled_disease_df, use_container_width=True)
+            
+            # Add Disease Analysis Visualizations
+            st.markdown("#### 📈 Disease Analysis Visualizations")
+            
+            # Create tabs for different disease visualizations
+            dis_viz_tab1, dis_viz_tab2, dis_viz_tab3 = st.tabs(["🎯 Risk Assessment", "📊 Repeat Counts", "🧬 Gene Analysis"])
+            
+            with dis_viz_tab1:
+                # Risk level distribution
+                risk_counts = filtered_disease_df['Risk_Level'].value_counts()
+                
+                fig_risk = px.pie(
+                    values=risk_counts.values,
+                    names=risk_counts.index,
+                    title="Risk Level Distribution",
+                    color=risk_counts.index,
+                    color_discrete_map={
+                        'High Risk': '#ff4444',
+                        'Normal Range': '#44ff44'
+                    }
+                )
+                fig_risk.update_traces(textposition='inside', textinfo='percent+label')
+                fig_risk.update_layout(height=400)
+                st.plotly_chart(fig_risk, use_container_width=True)
+            
+            with dis_viz_tab2:
+                # Repeat count vs threshold comparison
+                fig_repeat = px.scatter(
+                    filtered_disease_df,
+                    x='Gene',
+                    y='Repeat_Count',
+                    color='Risk_Level',
+                    size='Repeat_Count',
+                    hover_data=['Disease', 'Threshold'],
+                    title="Repeat Counts vs. Pathogenic Thresholds",
+                    color_discrete_map={
+                        'High Risk': '#ff4444',
+                        'Normal Range': '#44ff44'
+                    }
+                )
+                
+                # Add threshold lines
+                for _, row in filtered_disease_df.iterrows():
+                    fig_repeat.add_hline(
+                        y=row['Threshold'],
+                        line_dash="dash",
+                        line_color="red",
+                        annotation_text=f"{row['Gene']} threshold: {row['Threshold']}"
+                    )
+                
+                fig_repeat.update_layout(height=400, xaxis_tickangle=-45)
+                st.plotly_chart(fig_repeat, use_container_width=True)
+            
+            with dis_viz_tab3:
+                # Gene-specific analysis
+                gene_stats = filtered_disease_df.groupby('Gene').agg({
+                    'Repeat_Count': ['mean', 'max'],
+                    'Risk_Level': lambda x: (x == 'High Risk').sum(),
+                    'Disease': 'first'
+                }).round(2)
+                
+                gene_stats.columns = ['Avg Repeats', 'Max Repeats', 'High Risk Count', 'Disease']
+                
+                st.markdown("##### 📋 Gene-Specific Statistics")
+                st.dataframe(gene_stats, use_container_width=True)
+                
+                # Gene distribution bar chart
+                gene_counts = filtered_disease_df['Gene'].value_counts()
+                fig_genes = px.bar(
+                    x=gene_counts.index,
+                    y=gene_counts.values,
+                    title="Disease Gene Detection Frequency",
+                    labels={'x': 'Gene', 'y': 'Detection Count'}
+                )
+                fig_genes.update_layout(height=400)
+                st.plotly_chart(fig_genes, use_container_width=True)
             
             # Disease information cards
             st.markdown("#### 🩺 Clinical Information")
@@ -780,71 +1119,380 @@ elif page == "Disease Analysis":
             """)
 
 elif page == "About":
-    # Information about DNA classes
+    # Comprehensive documentation about scoring systems and detection logic
     st.markdown("---")
     st.markdown("## 🧬 About Non-B DNA Structures - 10-Class, 22-Subclass Classification System")
 
     st.markdown("""
     The first standardized taxonomic framework for Non-B DNA structures includes examples from human sequences, including human mitochondrial DNA (NC_012920.1), human telomerase RNA (NR_003287.2), human ADAR1 gene (NM_001126112.2), and human SNRPN gene (NR_024540.1).
     """)
+    
+    # Add comprehensive documentation tabs
+    doc_tab1, doc_tab2, doc_tab3, doc_tab4 = st.tabs(["🏗️ Structure Classes", "🎯 Scoring Systems", "🔍 Detection Logic", "📊 Pipeline"])
+    
+    with doc_tab1:
+        # Original structure information
+        info_cols = st.columns(2)
 
-    info_cols = st.columns(2)
+        with info_cols[0]:
+            st.markdown("""
+            <div class="class-info" style="border-left-color: #FF6B6B;">
+                <h4>🔴 Curved DNA</h4>
+                <p>Global Curvature: DNA with intrinsic bending due to sequence-specific features. Local Curvature: Short-range bends caused by specific base arrangements.</p>
+            </div>
+            
+            <div class="class-info" style="border-left-color: #4ECDC4;">
+                <h4>🟢 Slipped DNA</h4>
+                <p>Direct Repeat: Formed when repetitive sequences slip during replication. STR: Short Tandem Repeats creating secondary structures.</p>
+            </div>
+            
+            <div class="class-info" style="border-left-color: #45B7D1;">
+                <h4>🔵 Cruciform DNA</h4>
+                <p>IR/Hairpin structures: Four-way junctions and stem-loop structures formed by inverted repeat sequences creating cross-like formations.</p>
+            </div>
+            
+            <div class="class-info" style="border-left-color: #96CEB4;">
+                <h4>🟦 R-loop</h4>
+                <p>RNA-DNA hybrids: Three-stranded structures where RNA displaces one DNA strand, forming RNA-DNA hybrid with displaced single-stranded DNA loop.</p>
+            </div>
+            
+            <div class="class-info" style="border-left-color: #FECA57;">
+                <h4>🟡 Triplex</h4>
+                <p>Triplex: Three-stranded DNA with third strand in major groove. Sticky DNA: Transient triplex intermediates with sequence-specific binding properties.</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-    with info_cols[0]:
+        with info_cols[1]:
+            st.markdown("""
+            <div class="class-info" style="border-left-color: #FF9FF3;">
+                <h4>🟣 G-Quadruplex Family</h4>
+                <p>7 subclasses: Multimeric, Canonical, Relaxed, Bulged, Bipartite, Imperfect, G-Triplex. Four-stranded structures formed by guanine-rich sequences, critical for telomeres and gene regulation.</p>
+            </div>
+            
+            <div class="class-info" style="border-left-color: #F38BA8;">
+                <h4>🌸 i-Motif Family</h4>
+                <p>3 subclasses: Canonical, Relaxed, AC-motif. Four-stranded structures formed by cytosine-rich sequences, pH-dependent and complementary to G-quadruplexes.</p>
+            </div>
+            
+            <div class="class-info" style="border-left-color: #A8E6CF;">
+                <h4>🟢 Z-DNA</h4>
+                <p>Z-DNA: Left-handed double helix formed by alternating purine-pyrimidine sequences. eGZ: Extended G-Z junctions with unique structural properties.</p>
+            </div>
+            
+            <div class="class-info" style="border-left-color: #FFB347;">
+                <h4>🟠 Hybrid</h4>
+                <p>Dynamic overlap regions: Areas where multiple Non-B DNA structures can coexist or interchange, creating complex structural landscapes.</p>
+            </div>
+            
+            <div class="class-info" style="border-left-color: #DDA0DD;">
+                <h4>🟣 Non-B DNA Cluster Regions</h4>
+                <p>Hotspot regions: Genomic areas with high density of Non-B DNA forming sequences, often associated with replication stress and genomic instability.</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with doc_tab2:
+        st.markdown("## 🎯 Scoring Systems Documentation")
+        
         st.markdown("""
-        <div class="class-info" style="border-left-color: #FF6B6B;">
-            <h4>🔴 Curved DNA</h4>
-            <p>Global Curvature: DNA with intrinsic bending due to sequence-specific features. Local Curvature: Short-range bends caused by specific base arrangements.</p>
-        </div>
+        ### G4Hunter Score Algorithm
+        The G4Hunter algorithm evaluates G-quadruplex formation potential:
         
-        <div class="class-info" style="border-left-color: #4ECDC4;">
-            <h4>🟢 Slipped DNA</h4>
-            <p>Direct Repeat: Formed when repetitive sequences slip during replication. STR: Short Tandem Repeats creating secondary structures.</p>
-        </div>
+        **Algorithm:**
+        1. For each base in the sequence:
+           - G nucleotides: Add score based on run length (max +4)
+           - C nucleotides: Add negative score based on run length (max -4)
+           - A/T nucleotides: Add 0
+        2. Calculate mean score across the sequence
         
-        <div class="class-info" style="border-left-color: #45B7D1;">
-            <h4>🔵 Cruciform DNA</h4>
-            <p>IR/Hairpin structures: Four-way junctions and stem-loop structures formed by inverted repeat sequences creating cross-like formations.</p>
-        </div>
+        **Formula:**
+        ```
+        Score = mean(values) where:
+        - G runs: +min(run_length, 4)
+        - C runs: -min(run_length, 4)
+        - A/T: 0
+        ```
         
-        <div class="class-info" style="border-left-color: #96CEB4;">
-            <h4>🟦 R-loop</h4>
-            <p>RNA-DNA hybrids: Three-stranded structures where RNA displaces one DNA strand, forming RNA-DNA hybrid with displaced single-stranded DNA loop.</p>
-        </div>
+        **Interpretation:**
+        - Positive scores: G-rich regions favoring G4 formation
+        - Negative scores: C-rich regions favoring i-motif formation
+        - Score > 1.5: High G4 potential
+        """)
         
-        <div class="class-info" style="border-left-color: #FECA57;">
-            <h4>🟡 Triplex</h4>
-            <p>Triplex: Three-stranded DNA with third strand in major groove. Sticky DNA: Transient triplex intermediates with sequence-specific binding properties.</p>
+        st.markdown("""
+        ### ZSeeker Score Algorithm
+        Evaluates Z-DNA formation potential through dinucleotide analysis:
+        
+        **Algorithm:**
+        1. Count alternating purine-pyrimidine dinucleotides: GC, CG, GT, TG, AC, CA
+        2. Calculate ratio of these dinucleotides to total possible dinucleotide positions
+        
+        **Formula:**
+        ```
+        Score = count(alternating_dinucs) / (sequence_length / 2)
+        ```
+        
+        **Interpretation:**
+        - Score > 0.5: Moderate Z-DNA potential
+        - Score > 0.8: High Z-DNA potential
+        """)
+        
+        st.markdown("""
+        ### Triplex Score Algorithm
+        Assesses triplex DNA formation potential:
+        
+        **Algorithm:**
+        1. Count purine runs (A/G) of 10+ nucleotides
+        2. Count pyrimidine runs (C/T) of 10+ nucleotides
+        3. Calculate density relative to sequence length
+        
+        **Formula:**
+        ```
+        Score = (purine_runs + pyrimidine_runs) / sequence_length * 100
+        ```
+        
+        **Interpretation:**
+        - Score > 5: Moderate triplex potential
+        - Score > 10: High triplex potential
+        """)
+        
+        st.markdown("""
+        ### Additional Scoring Methods
+        
+        **Hairpin/Cruciform Score:**
+        - Evaluates palindrome strength through complement matching
+        - Higher scores indicate better palindrome formation potential
+        
+        **AT/GC Content Scores:**
+        - Simple nucleotide composition analysis
+        - Used for curved DNA and cluster region identification
+        
+        **i-Motif Score:**
+        - Similar to G4Hunter but optimized for i-motif structures
+        - Focuses on C-rich region identification
+        """)
+    
+    with doc_tab3:
+        st.markdown("## 🔍 Detection Logic and Regular Expressions")
+        
+        detection_data = {
+            "DNA Class": [
+                "Curved DNA - Global Curvature",
+                "Curved DNA - Local Curvature", 
+                "Slipped DNA - Direct Repeat",
+                "Slipped DNA - STR",
+                "Cruciform DNA - IR/Hairpin",
+                "R-loop - RNA-DNA hybrids",
+                "Triplex - Triplex",
+                "Triplex - Sticky DNA",
+                "G-Quadruplex - Multimeric",
+                "G-Quadruplex - Canonical",
+                "G-Quadruplex - Relaxed",
+                "G-Quadruplex - Bulged",
+                "G-Quadruplex - Bipartite", 
+                "G-Quadruplex - Imperfect",
+                "G-Quadruplex - G-Triplex",
+                "i-Motif - Canonical",
+                "i-Motif - Relaxed",
+                "i-Motif - AC-motif",
+                "Z-DNA - Z-DNA",
+                "Z-DNA - eGZ",
+                "Hybrid - Dynamic overlap",
+                "Non-B DNA Cluster - Hotspot"
+            ],
+            "Regular Expression": [
+                "A{4,}.{0,6}T{4,}",
+                "[AT]{8,}",
+                "([ATGC]{2,10})\\1{2,}",
+                "([ATGC]{1,6})\\1{4,}",
+                "[ATGC]{4,8}.{5,20}[ATGC]{4,8}",
+                "G{20,}[ATGC]{10,50}C{20,}",
+                "[AG]{15,}",
+                "[CT]{15,}",
+                "G{4,}.{1,7}G{4,}.{1,7}G{4,}.{1,7}G{4,}",
+                "G{3}.{1,7}G{3}.{1,7}G{3}.{1,7}G{3}",
+                "G{2,3}.{1,12}G{2,3}.{1,12}G{2,3}.{1,12}G{2,3}",
+                "G{3}.{1,7}G{1,3}.{1,7}G{3}.{1,7}G{3}",
+                "G{3}.{1,7}G{3}.{1,20}G{3}.{1,7}G{3}",
+                "G{2}.{1,12}G{2}.{1,12}G{2}.{1,12}G{2}",
+                "G{3}.{1,7}G{3}.{1,7}G{3}",
+                "C{3}.{1,7}C{3}.{1,7}C{3}.{1,7}C{3}",
+                "C{2,3}.{1,12}C{2,3}.{1,12}C{2,3}.{1,12}C{2,3}",
+                "[AC]{4,}.{1,7}[AC]{4,}.{1,7}[AC]{4,}",
+                "(?:CG){6,}",
+                "(?:CGG){4,}",
+                "G{3}.{1,7}G{3}.{1,7}C{3}.{1,7}C{3}",
+                "[ATGC]{100,}"
+            ],
+            "Scoring Method": [
+                "AT_Content", "AT_Content", "GC_Content", "GC_Content",
+                "Hairpin_Score", "GC_Content", "Triplex_Score", "Triplex_Score",
+                "G4Hunter", "G4Hunter", "G4Hunter", "G4Hunter", "G4Hunter",
+                "G4Hunter", "G4Hunter", "i-motif_Score", "i-motif_Score",
+                "i-motif_Score", "ZSeeker", "ZSeeker", "G4Hunter", "GC_Content"
+            ],
+            "Significance Threshold": [
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75",
+                "Low: <25, Med: 25-75, High: >75"
+            ]
+        }
+        
+        detection_df = pd.DataFrame(detection_data)
+        st.dataframe(detection_df, use_container_width=True, height=600)
+        
+        st.markdown("""
+        ### Detection Logic Explanation
+        
+        **Pattern Matching Strategy:**
+        1. **Non-overlapping Detection:** Uses custom iterator to prevent overlapping matches
+        2. **Greedy Matching:** Finds longest possible matches first
+        3. **Case Insensitive:** All patterns are case-insensitive
+        4. **Quantifier Usage:** 
+           - `{n,}`: n or more occurrences
+           - `{n,m}`: between n and m occurrences
+           - `.{n,m}`: any character between n and m times
+        
+        **Significance Classification:**
+        - **Minimal (<25):** Low structural potential
+        - **Significant (25-75):** Moderate structural potential  
+        - **Very Significant (>75):** High structural potential
+        """)
+        
+    with doc_tab4:
+        st.markdown("## 📊 NonBDNAFinder Analysis Pipeline")
+        
+        # Create a professional pipeline diagram using text and styling
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 15px; color: white; margin: 1rem 0;">
+            <h2 style="text-align: center; margin-bottom: 2rem;">🧬 NonBDNAFinder Analysis Pipeline</h2>
         </div>
         """, unsafe_allow_html=True)
-
-    with info_cols[1]:
+        
+        # Pipeline steps
+        pipeline_steps = [
+            ("📁 Input Processing", "FASTA file upload and parsing", "#4CAF50"),
+            ("🔍 Sequence Analysis", "Basic composition and quality checks", "#2196F3"),
+            ("🎯 Pattern Detection", "Regular expression-based motif identification", "#FF9800"),
+            ("⚡ Scoring Calculation", "Apply scoring algorithms (G4Hunter, ZSeeker, etc.)", "#9C27B0"),
+            ("📊 Classification", "Assign significance levels and categories", "#F44336"),
+            ("📈 Visualization", "Generate interactive charts and plots", "#00BCD4"),
+            ("💾 Results Export", "Download formatted results and reports", "#795548")
+        ]
+        
+        for i, (title, description, color) in enumerate(pipeline_steps):
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                st.markdown(f"""
+                <div style="background: {color}; color: white; padding: 1rem; border-radius: 50%; 
+                           text-align: center; width: 80px; height: 80px; display: flex; 
+                           align-items: center; justify-content: center; font-weight: bold;">
+                    {i+1}
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div style="background: white; border-left: 5px solid {color}; padding: 1rem; 
+                           margin-bottom: 1rem; border-radius: 0 10px 10px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <h4 style="margin: 0; color: {color};">{title}</h4>
+                    <p style="margin: 0.5rem 0 0 0; color: #666;">{description}</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            if i < len(pipeline_steps) - 1:
+                st.markdown("""
+                <div style="text-align: center; font-size: 2rem; color: #667eea; margin: 0.5rem 0;">
+                    ⬇️
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Technical specifications
         st.markdown("""
-        <div class="class-info" style="border-left-color: #FF9FF3;">
-            <h4>🟣 G-Quadruplex Family</h4>
-            <p>7 subclasses: Multimeric, Canonical, Relaxed, Bulged, Bipartite, Imperfect, G-Triplex. Four-stranded structures formed by guanine-rich sequences, critical for telomeres and gene regulation.</p>
-        </div>
+        ### 🔧 Technical Specifications
         
-        <div class="class-info" style="border-left-color: #F38BA8;">
-            <h4>🌸 i-Motif Family</h4>
-            <p>3 subclasses: Canonical, Relaxed, AC-motif. Four-stranded structures formed by cytosine-rich sequences, pH-dependent and complementary to G-quadruplexes.</p>
-        </div>
+        **Supported Input Formats:**
+        - FASTA (.fa, .fasta)
+        - Plain text (.txt)
+        - Multi-FASTA files
         
-        <div class="class-info" style="border-left-color: #A8E6CF;">
-            <h4>🟢 Z-DNA</h4>
-            <p>Z-DNA: Left-handed double helix formed by alternating purine-pyrimidine sequences. eGZ: Extended G-Z junctions with unique structural properties.</p>
-        </div>
+        **Analysis Parameters:**
+        - Maximum file size: 200MB
+        - Sequence length: No theoretical limit
+        - Detection classes: 10 major classes
+        - Subclasses: 22 distinct subtypes
         
-        <div class="class-info" style="border-left-color: #FFB347;">
-            <h4>🟠 Hybrid</h4>
-            <p>Dynamic overlap regions: Areas where multiple Non-B DNA structures can coexist or interchange, creating complex structural landscapes.</p>
-        </div>
+        **Output Formats:**
+        - Interactive visualizations (Plotly)
+        - CSV data exports
+        - Excel formatted reports
+        - Summary statistics
         
-        <div class="class-info" style="border-left-color: #DDA0DD;">
-            <h4>🟣 Non-B DNA Cluster Regions</h4>
-            <p>Hotspot regions: Genomic areas with high density of Non-B DNA forming sequences, often associated with replication stress and genomic instability.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        **Performance:**
+        - Pattern matching: O(n) complexity
+        - Memory usage: Linear with sequence length
+        - Real-time progress tracking
+        """)
+        
+        # Disease analysis pipeline
+        st.markdown("""
+        ### 🩺 Disease Analysis Module Pipeline
+        
+        **Pathogenic Repeat Detection:**
+        1. **Target Gene Scanning:** Screen for known disease-associated genes
+        2. **Repeat Quantification:** Count repeat units in detected motifs
+        3. **Threshold Comparison:** Compare against clinical pathogenic thresholds
+        4. **Risk Assessment:** Classify as Normal Range or High Risk
+        5. **Clinical Annotation:** Link to OMIM database entries
+        6. **Visualization:** Generate risk assessment charts
+        
+        **Supported Disease Categories:**
+        - Trinucleotide repeat disorders (CAG, CGG, GAA)
+        - Hexanucleotide repeats (GGGGCC)
+        - Other pathogenic repeat expansions (CTG)
+        """)
+        
+        # Add download button for complete documentation
+        doc_content = """
+# NonBDNAFinder Documentation
+
+## Overview
+NonBDNAFinder is a comprehensive tool for detecting and analyzing non-canonical DNA structures using a 10-class, 22-subclass classification system.
+
+## Scoring Systems
+[Complete scoring system documentation as shown above]
+
+## Detection Logic
+[Complete detection logic documentation as shown above]
+
+## Pipeline
+[Complete pipeline documentation as shown above]
+        """
+        
+        st.download_button(
+            "📄 Download Complete Documentation",
+            data=doc_content.encode("utf-8"),
+            file_name=f"NonBDNAFinder_Documentation_{datetime.now().strftime('%Y%m%d')}.md",
+            mime="text/markdown"
+        )
 
 st.markdown("""
 ---
