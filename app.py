@@ -1,4 +1,3 @@
-
 # ======================
 # utils.py
 # ======================
@@ -79,19 +78,34 @@ def imotif_score(seq: str) -> float:
     return total_score / len(seq) * 100
 
 # ======================
-# Color Scheme for DNA Classes
+# Color Scheme for DNA Classes (Updated for New Classification)
 # ======================
 CLASS_COLORS = {
-    'A-form DNA': '#FF6B6B',        # Coral red
-    'Z-DNA': '#4ECDC4',             # Teal
-    'Quadruplex': '#45B7D1',        # Sky blue
-    'i-motif': '#96CEB4',           # Mint green
-    'Triplex': '#FECA57',           # Yellow
-    'Hairpin': '#FF9FF3',           # Pink
-    'Cruciform': '#F38BA8',         # Rose
-    'Slipped': '#A8E6CF',           # Light green
-    'Bent DNA': '#FFB347',          # Orange
-    'Supercoiled': '#DDA0DD'        # Plum
+    'Curved DNA': '#FF6B6B',                    # Red
+    'Slipped DNA': '#4ECDC4',                   # Teal
+    'Cruciform DNA': '#45B7D1',                 # Sky blue
+    'R-loop': '#96CEB4',                        # Mint green
+    'Triplex': '#FECA57',                       # Yellow
+    'G-Quadruplex Family': '#FF9FF3',           # Pink
+    'i-Motif Family': '#F38BA8',                # Rose
+    'Z-DNA': '#A8E6CF',                         # Light green
+    'Hybrid': '#FFB347',                        # Orange
+    'Non-B DNA Cluster Regions': '#DDA0DD'     # Plum
+}
+
+# ======================
+# Disease Database
+# ======================
+DISEASE_MOTIFS = {
+    "HTT": {"repeat": "CAG", "disease": "Huntington Disease", "omim": "143100", "threshold": 36},
+    "FMR1": {"repeat": "CGG", "disease": "Fragile X Syndrome", "omim": "300624", "threshold": 200},
+    "FXN": {"repeat": "GAA", "disease": "Friedreich Ataxia", "omim": "229300", "threshold": 66},
+    "ATXN1": {"repeat": "CAG", "disease": "Spinocerebellar Ataxia Type 1", "omim": "164400", "threshold": 39},
+    "ATXN2": {"repeat": "CAG", "disease": "Spinocerebellar Ataxia Type 2", "omim": "183090", "threshold": 32},
+    "ATXN3": {"repeat": "CAG", "disease": "Spinocerebellar Ataxia Type 3", "omim": "109150", "threshold": 52},
+    "DMPK": {"repeat": "CTG", "disease": "Myotonic Dystrophy Type 1", "omim": "160900", "threshold": 50},
+    "AR": {"repeat": "CAG", "disease": "Spinal and Bulbar Muscular Atrophy", "omim": "313200", "threshold": 38},
+    "C9orf72": {"repeat": "GGGGCC", "disease": "ALS/FTD", "omim": "105550", "threshold": 30}
 }
 
 # ======================
@@ -114,7 +128,7 @@ st.set_page_config(
     page_title="Non-B DNA Motif Finder", 
     layout="wide",
     page_icon="🧬",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Custom CSS for enhanced styling
@@ -170,398 +184,430 @@ st.markdown("""
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
+    
+    .disease-card {
+        background: linear-gradient(135deg, #fff5f5 0%, #fed7d7 100%);
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin: 1rem 0;
+        border-left: 5px solid #e53e3e;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# Main header
-st.markdown("""
-<div class="main-header">
-    <h1>🧬 Non-B DNA Motif Finder</h1>
-    <p>Comprehensive Detection of 10 Classes & 22 Subclasses of Non-B DNA Structures</p>
-</div>
-""", unsafe_allow_html=True)
+# Sidebar navigation
+st.sidebar.title("Navigation")
+page = st.sidebar.selectbox("Choose a section:", 
+    ["Main Analysis", "Disease Analysis", "About"])
 
-# Information section
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
+if page == "Main Analysis":
+    # Main header
     st.markdown("""
-    <div class="info-card">
-        <h3>🔬 Advanced DNA Structure Analysis</h3>
-        <p>This tool identifies and analyzes various non-canonical DNA structures that deviate from the standard B-form double helix. 
-        These structures play crucial roles in gene regulation, DNA replication, and genomic stability.</p>
+    <div class="main-header">
+        <h1>🧬 Non-B DNA Motif Finder</h1>
+        <p>10-Class, 22-Subclass Classification System for Non-B DNA Structures</p>
     </div>
     """, unsafe_allow_html=True)
 
-# File upload section
-st.markdown("### 📁 Upload Your DNA Sequence")
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    uploaded = st.file_uploader("Choose a FASTA file", type=["fa", "fasta", "txt"], 
-                               help="Upload a FASTA file containing DNA sequences")
-
-with col2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    use_example = st.button("🧪 Use Example Sequence", help="Load a sample sequence for testing")
-
-sequence_input = ""
-
-if uploaded:
-    try:
-        sequence_input = parse_fasta(uploaded.read().decode())
-        st.success("✅ Sequence uploaded successfully!")
-    except:
-        st.error("❌ Invalid FASTA format. Please check your file.")
-elif use_example:
-    sequence_input = parse_fasta(EXAMPLE_FASTA)
-    st.info("🧪 Example sequence loaded!")
-
-if sequence_input:
-    # Display sequence info
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Sequence Length", f"{len(sequence_input)} bp")
+    # Information section
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.metric("GC Content", f"{gc_content(sequence_input):.1f}%")
-    with col3:
-        st.metric("AT Content", f"{at_content(sequence_input):.1f}%")
-    with col4:
-        st.metric("Sequence Type", "DNA")
-    
-    # Sequence display
-    with st.expander("📋 View Sequence", expanded=False):
-        st.text_area("Input Sequence", sequence_input, height=150)
+        st.markdown("""
+        <div class="info-card">
+            <h3>🔬 Advanced DNA Structure Analysis</h3>
+            <p>Non-canonical DNA structures play key roles in genome stability, regulation, and evolution.
+            This application detects and analyzes 18 distinct Non-B DNA motifs in any DNA sequence or multi-FASTA file.
+            Motif Classes: G-quadruplex-related (G4, Relaxed G4, Bulged G4, Bipartite G4, Multimeric G4, G-Triplex, i-Motif, Hybrid),
+            helix/curvature (Z-DNA, eGZ (Extruded-G), Curved DNA, AC-Motif),
+            repeat/junction (Slipped DNA, Cruciform, Sticky DNA, Triplex DNA),
+            hybrid/cluster (R-Loop, Non-B DNA Clusters).
+            Upload single or multi-FASTA files for comprehensive analysis.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-    # Comprehensive motif detection with 10 classes and 22 subclasses
-    def non_overlapping_finditer(pattern, seq):
-        regex = re.compile(pattern)
-        pos = 0
-        while pos < len(seq):
-            match = regex.search(seq, pos)
-            if not match:
-                break
-            yield match
-            pos = match.end()
+    # File upload section
+    st.markdown("### 📁 Upload Your DNA Sequence")
+    col1, col2 = st.columns([2, 1])
 
-    def create_motif_dict(cls, subtype, match, seq, score_method="None", score="0", group=0):
-        sequence = match.group(group)
-        return {
-            "Class": cls, 
-            "Subtype": subtype, 
-            "Start": match.start()+1,
-            "End": match.start()+len(sequence), 
-            "Length": len(sequence),
-            "Sequence": wrap(sequence), 
-            "ScoreMethod": score_method, 
-            "Score": score
-        }
+    with col1:
+        uploaded = st.file_uploader("Choose a FASTA file", type=["fa", "fasta", "txt"], 
+                                   help="Upload a FASTA file containing DNA sequences")
 
-    def find_motif(seq, pattern, cls, subtype, score_method="None", score_func=None, group=0):
-        results = []
-        for m in non_overlapping_finditer(pattern, seq):
-            score = f"{score_func(m.group(group)):.2f}" if score_func else "0"
-            results.append(create_motif_dict(cls, subtype, m, seq, score_method, score, group))
-        return results
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        use_example = st.button("🧪 Use Example Sequence", help="Load a sample sequence for testing")
 
-    # Progress indicator
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    
-    status_text.text("🔍 Analyzing DNA sequence for non-B structures...")
-    
-    motifs = []
-    total_steps = 22
-    current_step = 0
-    
-    # Class 1: A-form DNA (2 subclasses)
-    status_text.text("🔍 Detecting A-form DNA structures...")
-    motifs += find_motif(sequence_input, r"[AG]{10,}", "A-form DNA", "Purine_Rich_A-form", "AT_Content", at_content)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"[CT]{10,}", "A-form DNA", "Pyrimidine_Rich_A-form", "AT_Content", at_content)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 2: Z-DNA (3 subclasses)  
-    status_text.text("🔍 Detecting Z-DNA structures...")
-    motifs += find_motif(sequence_input, r"(?:CG){6,}", "Z-DNA", "CG_Repeat", "ZSeeker", zseeker_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"(?:CA){4,}", "Z-DNA", "CA_Repeat", "ZSeeker", zseeker_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"(?:GT){4,}", "Z-DNA", "GT_Repeat", "ZSeeker", zseeker_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 3: Quadruplex (3 subclasses)
-    status_text.text("🔍 Detecting G-Quadruplex structures...")
-    motifs += find_motif(sequence_input, r"G{3,}.{1,7}G{3,}.{1,7}G{3,}.{1,7}G{3,}", "Quadruplex", "Canonical_G-Quadruplex", "G4Hunter", g4hunter_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"G{2}.{1,12}G{2}.{1,12}G{2}.{1,12}G{2}", "Quadruplex", "Non-canonical_G-Quadruplex", "G4Hunter", g4hunter_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"G{3,}.{10,50}G{3,}.{10,50}G{3,}.{10,50}G{3,}", "Quadruplex", "Long_Loop_G-Quadruplex", "G4Hunter", g4hunter_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 4: i-motif (2 subclasses)
-    status_text.text("🔍 Detecting i-motif structures...")
-    motifs += find_motif(sequence_input, r"C{3,}.{1,7}C{3,}.{1,7}C{3,}.{1,7}C{3,}", "i-motif", "Canonical_i-motif", "i-motif_Score", imotif_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"C{2}.{1,12}C{2}.{1,12}C{2}.{1,12}C{2}", "i-motif", "Non-canonical_i-motif", "i-motif_Score", imotif_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 5: Triplex (2 subclasses)
-    status_text.text("🔍 Detecting Triplex DNA structures...")
-    motifs += find_motif(sequence_input, r"[AG]{15,}", "Triplex", "H-DNA", "Triplex_Score", triplex_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"[CT]{15,}", "Triplex", "Mirror_Repeats", "Triplex_Score", triplex_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 6: Hairpin (2 subclasses)
-    status_text.text("🔍 Detecting Hairpin structures...")
-    motifs += find_motif(sequence_input, r"[ATGC]{4,}.{4,20}[ATGC]{4,}", "Hairpin", "Palindromic_Sequences", "Hairpin_Score", hairpin_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"[ATGC]{6,}.{3,15}[ATGC]{6,}", "Hairpin", "Inverted_Repeats", "Hairpin_Score", hairpin_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 7: Cruciform (2 subclasses)
-    status_text.text("🔍 Detecting Cruciform structures...")
-    motifs += find_motif(sequence_input, r"[ATGC]{8,}.{10,30}[ATGC]{8,}", "Cruciform", "Large_Palindromes", "Hairpin_Score", hairpin_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"[ATGC]{4,8}.{5,20}[ATGC]{4,8}", "Cruciform", "Short_Palindromes", "Hairpin_Score", hairpin_score)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 8: Slipped structures (2 subclasses)
-    status_text.text("🔍 Detecting Slipped structures...")
-    motifs += find_motif(sequence_input, r"([ATGC]{2,10})\1{3,}", "Slipped", "Direct_Repeats", "Repeat_Score", lambda x: len(x))
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"([ATGC]{1,4})\1{5,}", "Slipped", "Short_Tandem_Repeats", "Repeat_Score", lambda x: len(x))
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 9: Bent DNA (2 subclasses)
-    status_text.text("🔍 Detecting Bent DNA structures...")
-    motifs += find_motif(sequence_input, r"A{4,}.{0,6}T{4,}", "Bent DNA", "AT_Tracts", "AT_Content", at_content)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"[AT]{10,}", "Bent DNA", "Phased_AT_Tracts", "AT_Content", at_content)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Class 10: Supercoiled DNA (2 subclasses)
-    status_text.text("🔍 Detecting Supercoiled DNA structures...")
-    motifs += find_motif(sequence_input, r"[ATGC]{200,}", "Supercoiled", "Negative_Supercoiling", "GC_Content", gc_content)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    motifs += find_motif(sequence_input, r"[GC]{100,}", "Supercoiled", "Positive_Supercoiling", "GC_Content", gc_content)
-    current_step += 1
-    progress_bar.progress(current_step / total_steps)
-    
-    # Clear progress indicators
-    progress_bar.empty()
-    status_text.empty()
+    sequence_input = ""
 
-    # Results display
-    df = pd.DataFrame(motifs)
-    
-    if not df.empty:
-        st.markdown("---")
-        st.markdown("## 📊 Analysis Results")
-        
-        # Summary metrics
+    if uploaded:
+        try:
+            sequence_input = parse_fasta(uploaded.read().decode())
+            st.success("✅ Sequence uploaded successfully!")
+        except:
+            st.error("❌ Invalid FASTA format. Please check your file.")
+    elif use_example:
+        sequence_input = parse_fasta(EXAMPLE_FASTA)
+        st.info("🧪 Example sequence loaded!")
+
+    if sequence_input:
+        # Display sequence info
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #4ECDC4;">
-                <h3>{len(df)}</h3>
-                <p>Total Motifs Found</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.metric("Sequence Length", f"{len(sequence_input)} bp")
         with col2:
-            unique_classes = df['Class'].nunique()
-            st.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #45B7D1;">
-                <h3>{unique_classes}</h3>
-                <p>DNA Classes Detected</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.metric("GC Content", f"{gc_content(sequence_input):.1f}%")
         with col3:
-            unique_subtypes = df['Subtype'].nunique()
-            st.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #FECA57;">
-                <h3>{unique_subtypes}</h3>
-                <p>Subclasses Found</p>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.metric("AT Content", f"{at_content(sequence_input):.1f}%")
         with col4:
-            coverage = (df['Length'].sum() / len(sequence_input) * 100)
-            st.markdown(f"""
-            <div class="metric-card" style="border-left: 4px solid #FF6B6B;">
-                <h3>{coverage:.1f}%</h3>
-                <p>Sequence Coverage</p>
-            </div>
-            """, unsafe_allow_html=True)
+            st.metric("Sequence Type", "DNA")
         
-        # Class distribution
-        st.markdown("### 🎨 Class Distribution")
-        class_counts = df['Class'].value_counts()
+        # Sequence display
+        with st.expander("📋 View Sequence", expanded=False):
+            st.text_area("Input Sequence", sequence_input, height=150)
+
+        # New 10-Class, 22-Subclass Classification System
+        def non_overlapping_finditer(pattern, seq):
+            regex = re.compile(pattern)
+            pos = 0
+            while pos < len(seq):
+                match = regex.search(seq, pos)
+                if not match:
+                    break
+                yield match
+                pos = match.end()
+
+        def get_significance_level(score, threshold_low=25, threshold_high=75):
+            """Convert raw score to significance level"""
+            if score < threshold_low:
+                return "Minimal"
+            elif score < threshold_high:
+                return "Significant"
+            else:
+                return "Very Significant"
+
+        def create_motif_dict(cls, subtype, match, seq, score_method="None", score="0", group=0):
+            sequence = match.group(group)
+            raw_score = float(score) if isinstance(score, str) else score
+            significance = get_significance_level(raw_score)
+            return {
+                "Class": cls, 
+                "Subtype": subtype, 
+                "Start": match.start()+1,
+                "End": match.start()+len(sequence), 
+                "Length": len(sequence),
+                "Sequence": sequence,  # Raw sequence without wrapping
+                "ScoreMethod": score_method, 
+                "Score": raw_score,
+                "Significance": significance
+            }
+
+        def find_motif(seq, pattern, cls, subtype, score_method="None", score_func=None, group=0):
+            results = []
+            for m in non_overlapping_finditer(pattern, seq):
+                score = score_func(m.group(group)) if score_func else 0
+                results.append(create_motif_dict(cls, subtype, m, seq, score_method, score, group))
+            return results
+
+        # Progress indicator
+        progress_bar = st.progress(0)
+        status_text = st.empty()
         
-        # Create colorful pie chart
-        fig = px.pie(
-            values=class_counts.values, 
-            names=class_counts.index,
-            color=class_counts.index,
-            color_discrete_map=CLASS_COLORS,
-            title="Distribution of Non-B DNA Classes"
-        )
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(
-            font=dict(size=14),
-            showlegend=True,
-            height=500
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        status_text.text("🔍 Analyzing DNA sequence for non-B structures...")
         
-        # Subtype analysis
-        col1, col2 = st.columns(2)
+        motifs = []
+        total_steps = 22  # Corrected: 2+2+1+1+2+7+3+2+1+1 = 22 subclasses
+        current_step = 0
         
-        with col1:
-            st.markdown("### 🔬 Subtype Distribution")
-            subtype_counts = df['Subtype'].value_counts()
+        # 1. Curved DNA (2 subclasses)
+        status_text.text("🔍 Detecting Curved DNA structures...")
+        motifs += find_motif(sequence_input, r"A{4,}.{0,6}T{4,}", "Curved DNA", "Global Curvature", "AT_Content", at_content)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"[AT]{8,}", "Curved DNA", "Local Curvature", "AT_Content", at_content)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 2. Slipped DNA (2 subclasses)
+        status_text.text("🔍 Detecting Slipped DNA structures...")
+        motifs += find_motif(sequence_input, r"([ATGC]{2,10})\1{3,}", "Slipped DNA", "Direct Repeat", "Repeat_Score", lambda x: len(x))
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"([ATGC]{1,4})\1{5,}", "Slipped DNA", "STR", "Repeat_Score", lambda x: len(x))
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 3. Cruciform DNA (1 subclass - IR/Hairpin structures) 
+        status_text.text("🔍 Detecting Cruciform DNA structures...")
+        motifs += find_motif(sequence_input, r"[ATGC]{6,}.{5,30}[ATGC]{6,}", "Cruciform DNA", "IR/Hairpin structures", "Hairpin_Score", hairpin_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 4. R-loop (1 subclass)
+        status_text.text("🔍 Detecting R-loop structures...")
+        motifs += find_motif(sequence_input, r"G{20,}[ATGC]{10,50}C{20,}", "R-loop", "RNA-DNA hybrids", "GC_Content", gc_content)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 5. Triplex (2 subclasses)
+        status_text.text("🔍 Detecting Triplex structures...")
+        motifs += find_motif(sequence_input, r"[AG]{15,}", "Triplex", "Triplex", "Triplex_Score", triplex_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"[CT]{15,}", "Triplex", "Sticky DNA", "Triplex_Score", triplex_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 6. G-Quadruplex Family (7 subclasses)
+        status_text.text("🔍 Detecting G-Quadruplex Family structures...")
+        motifs += find_motif(sequence_input, r"G{4,}.{1,7}G{4,}.{1,7}G{4,}.{1,7}G{4,}", "G-Quadruplex Family", "Multimeric", "G4Hunter", g4hunter_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"G{3}.{1,7}G{3}.{1,7}G{3}.{1,7}G{3}", "G-Quadruplex Family", "Canonical", "G4Hunter", g4hunter_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"G{3}.{8,12}G{3}.{8,12}G{3}.{8,12}G{3}", "G-Quadruplex Family", "Relaxed", "G4Hunter", g4hunter_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"G{2,3}[ATGC]G{2,3}.{1,7}G{2,3}[ATGC]G{2,3}", "G-Quadruplex Family", "Bulged", "G4Hunter", g4hunter_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"G{3}.{15,50}G{3}.{1,7}G{3}.{1,7}G{3}", "G-Quadruplex Family", "Bipartite", "G4Hunter", g4hunter_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"G{2}.{1,12}G{2}.{1,12}G{2}.{1,12}G{2}", "G-Quadruplex Family", "Imperfect", "G4Hunter", g4hunter_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"G{3}.{1,7}G{3}.{1,7}G{3}", "G-Quadruplex Family", "G-Triplex", "G4Hunter", g4hunter_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 7. i-Motif Family (3 subclasses)
+        status_text.text("🔍 Detecting i-Motif Family structures...")
+        motifs += find_motif(sequence_input, r"C{3}.{1,7}C{3}.{1,7}C{3}.{1,7}C{3}", "i-Motif Family", "Canonical", "i-motif_Score", imotif_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"C{2}.{1,12}C{2}.{1,12}C{2}.{1,12}C{2}", "i-Motif Family", "Relaxed", "i-motif_Score", imotif_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"[AC]{4,}.{1,7}[AC]{4,}.{1,7}[AC]{4,}", "i-Motif Family", "AC-motif", "i-motif_Score", imotif_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 8. Z-DNA (2 subclasses)
+        status_text.text("🔍 Detecting Z-DNA structures...")
+        motifs += find_motif(sequence_input, r"(?:CG){6,}", "Z-DNA", "Z-DNA", "ZSeeker", zseeker_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        motifs += find_motif(sequence_input, r"(?:CGG){4,}", "Z-DNA", "eGZ", "ZSeeker", zseeker_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 9. Hybrid (1 subclass)
+        status_text.text("🔍 Detecting Hybrid structures...")
+        motifs += find_motif(sequence_input, r"G{3}.{1,7}G{3}.{1,7}C{3}.{1,7}C{3}", "Hybrid", "Dynamic overlap regions", "G4Hunter", g4hunter_score)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # 10. Non-B DNA Cluster Regions (1 subclass)
+        status_text.text("🔍 Detecting Non-B DNA Cluster Regions...")
+        motifs += find_motif(sequence_input, r"[ATGC]{100,}", "Non-B DNA Cluster Regions", "Hotspot regions", "GC_Content", gc_content)
+        current_step += 1
+        progress_bar.progress(current_step / total_steps)
+        
+        # Clear progress indicators
+        progress_bar.empty()
+        status_text.empty()
+
+        # Results display
+        df = pd.DataFrame(motifs)
+        
+        if not df.empty:
+            st.markdown("---")
+            st.markdown("## 📊 Analysis Results")
             
-            # Create horizontal bar chart
-            fig2 = px.bar(
-                x=subtype_counts.values,
-                y=subtype_counts.index,
-                orientation='h',
-                color=subtype_counts.index,
-                title="Subclass Frequency"
-            )
-            fig2.update_layout(
-                height=400,
-                showlegend=False,
-                yaxis={'categoryorder': 'total ascending'}
-            )
-            st.plotly_chart(fig2, use_container_width=True)
-        
-        with col2:
-            st.markdown("### 📏 Length Distribution")
-            fig3 = px.histogram(
-                df, 
-                x='Length', 
-                color='Class',
+            # Summary metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #4ECDC4;">
+                    <h3>{len(df)}</h3>
+                    <p>Total Motifs Found</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                unique_classes = df['Class'].nunique()
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #45B7D1;">
+                    <h3>{unique_classes}</h3>
+                    <p>DNA Classes Detected</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                unique_subtypes = df['Subtype'].nunique()
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #FECA57;">
+                    <h3>{unique_subtypes}</h3>
+                    <p>Subclasses Found</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                coverage = (df['Length'].sum() / len(sequence_input) * 100)
+                st.markdown(f"""
+                <div class="metric-card" style="border-left: 4px solid #FF6B6B;">
+                    <h3>{coverage:.1f}%</h3>
+                    <p>Sequence Coverage</p>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Class distribution
+            st.markdown("### 🎨 Class Distribution")
+            class_counts = df['Class'].value_counts()
+            
+            # Create colorful pie chart
+            fig = px.pie(
+                values=class_counts.values, 
+                names=class_counts.index,
+                color=class_counts.index,
                 color_discrete_map=CLASS_COLORS,
-                title="Motif Length Distribution",
-                nbins=20
+                title="Distribution of Non-B DNA Classes"
             )
-            fig3.update_layout(height=400)
-            st.plotly_chart(fig3, use_container_width=True)
-        
-        # Sequence position visualization
-        st.markdown("### 📍 Motif Positions Along Sequence")
-        
-        fig4 = px.scatter(
-            df,
-            x='Start',
-            y='Class',
-            color='Class',
-            size='Length',
-            hover_data=['Subtype', 'Score'],
-            color_discrete_map=CLASS_COLORS,
-            title="Motif Positions and Sizes"
-        )
-        fig4.update_layout(height=400)
-        st.plotly_chart(fig4, use_container_width=True)
-        
-        # Detailed results table
-        st.markdown("### 📋 Detailed Results")
-        
-        # Add color coding to the dataframe display
-        def color_class(val):
-            color = CLASS_COLORS.get(val, '#FFFFFF')
-            return f'background-color: {color}; color: white; font-weight: bold;'
-        
-        # Style the dataframe
-        styled_df = df.style.applymap(color_class, subset=['Class'])
-        
-        st.dataframe(styled_df, use_container_width=True, height=400)
-        
-        # Download section
-        st.markdown("### 💾 Download Results")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "📄 Download CSV",
-                data=csv,
-                file_name=f"non_b_dna_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            fig.update_layout(
+                font=dict(size=14),
+                showlegend=True,
+                height=500
             )
-        
-        with col2:
-            # Create Excel file
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.to_excel(writer, sheet_name='Non-B DNA Results', index=False)
-                
-                # Get workbook and worksheet
-                workbook = writer.book
-                worksheet = writer.sheets['Non-B DNA Results']
-                
-                # Add some formatting
-                header_format = workbook.add_format({
-                    'bold': True,
-                    'text_wrap': True,
-                    'valign': 'top',
-                    'fg_color': '#667eea',
-                    'font_color': 'white',
-                    'border': 1
-                })
-                
-                # Apply header format
-                for col_num, value in enumerate(df.columns.values):
-                    worksheet.write(0, col_num, value, header_format)
-                    
-            excel_data = output.getvalue()
+            st.plotly_chart(fig, use_container_width=True)
             
-            st.download_button(
-                "📊 Download Excel",
-                data=excel_data,
-                file_name=f"non_b_dna_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            # Subtype analysis
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("### 🔬 Subtype Distribution")
+                subtype_counts = df['Subtype'].value_counts()
+                
+                # Create horizontal bar chart
+                fig2 = px.bar(
+                    x=subtype_counts.values,
+                    y=subtype_counts.index,
+                    orientation='h',
+                    color=subtype_counts.index,
+                    title="Subclass Frequency"
+                )
+                fig2.update_layout(
+                    height=400,
+                    showlegend=False,
+                    yaxis={'categoryorder': 'total ascending'}
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+            
+            with col2:
+                st.markdown("### 📏 Length Distribution")
+                fig3 = px.histogram(
+                    df, 
+                    x='Length', 
+                    color='Class',
+                    color_discrete_map=CLASS_COLORS,
+                    title="Motif Length Distribution",
+                    nbins=20
+                )
+                fig3.update_layout(height=400)
+                st.plotly_chart(fig3, use_container_width=True)
+            
+            # Sequence position visualization
+            st.markdown("### 📍 Motif Positions Along Sequence")
+            
+            fig4 = px.scatter(
+                df,
+                x='Start',
+                y='Class',
+                color='Class',
+                size='Length',
+                hover_data=['Subtype', 'Score', 'Significance'],
+                color_discrete_map=CLASS_COLORS,
+                title="Motif Positions and Sizes"
             )
-        
-        with col3:
-            # Create summary report
-            summary_text = f"""
+            fig4.update_layout(height=400)
+            st.plotly_chart(fig4, use_container_width=True)
+            
+            # Detailed results table
+            st.markdown("### 📋 Detailed Results")
+            
+            # Add color coding to the dataframe display
+            def color_class(val):
+                color = CLASS_COLORS.get(val, '#FFFFFF')
+                return f'background-color: {color}; color: white; font-weight: bold;'
+            
+            # Style the dataframe
+            styled_df = df.style.applymap(color_class, subset=['Class'])
+            
+            st.dataframe(styled_df, use_container_width=True, height=400)
+            
+            # Download section
+            st.markdown("### 💾 Download Results")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                csv = df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "📄 Download CSV",
+                    data=csv,
+                    file_name=f"non_b_dna_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv"
+                )
+            
+            with col2:
+                # Create Excel file
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    df.to_excel(writer, sheet_name='Non-B DNA Results', index=False)
+                    
+                    # Get workbook and worksheet
+                    workbook = writer.book
+                    worksheet = writer.sheets['Non-B DNA Results']
+                    
+                    # Add some formatting
+                    header_format = workbook.add_format({
+                        'bold': True,
+                        'text_wrap': True,
+                        'valign': 'top',
+                        'fg_color': '#667eea',
+                        'font_color': 'white',
+                        'border': 1
+                    })
+                    
+                    # Apply header format
+                    for col_num, value in enumerate(df.columns.values):
+                        worksheet.write(0, col_num, value, header_format)
+                        
+                excel_data = output.getvalue()
+                
+                st.download_button(
+                    "📊 Download Excel",
+                    data=excel_data,
+                    file_name=f"non_b_dna_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            
+            with col3:
+                # Create summary report
+                summary_text = f"""
 Non-B DNA Analysis Summary
 =========================
 Sequence Length: {len(sequence_input)} bp
@@ -577,90 +623,233 @@ Class Breakdown:
 {chr(10).join([f"- {cls}: {count} motifs" for cls, count in class_counts.items()])}
 
 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-            """
-            
-            st.download_button(
-                "📝 Download Summary",
-                data=summary_text,
-                file_name=f"non_b_dna_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                mime="text/plain"
-            )
+                """
+                
+                st.download_button(
+                    "📝 Download Summary",
+                    data=summary_text,
+                    file_name=f"non_b_dna_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain"
+                )
+        
+        else:
+            st.markdown("""
+            <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-radius: 10px; margin: 2rem 0;">
+                <h3>🔍 No Non-B DNA Motifs Found</h3>
+                <p>The sequence appears to contain primarily standard B-form DNA structures.</p>
+                <p>Try uploading a different sequence or use the example sequence to see detected motifs.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+elif page == "Disease Analysis":
+    st.markdown("""
+    <div class="main-header">
+        <h1>🩺 Disease-Related Repeat Motif Detection</h1>
+        <p>Clinical Analysis of Pathogenic Repeat Expansions</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    else:
+    st.markdown("""
+    <div class="disease-card">
+        <h3>🧬 Disease-Related Repeat Motif Detection Module</h3>
+        <p>This module provides a comprehensive computational framework for identifying and clinically annotating pathogenic repeat expansions in DNA sequences, 
+        with a focus on trinucleotide repeat disorders, fragile sites, and autism spectrum disorder (ASD)-related variants.</p>
+        
+        <p>The detection and annotation logic are grounded in clinical thresholds and inheritance patterns from research by 
+        <strong>Depienne and Mandel (2021)</strong>, reflecting on three decades of research into repeat expansion disorders.</p>
+        
+        <p><em>Reference: Depienne, C., & Mandel, J.-L. (2021). 30 years of repeat expansion disorders: What have we learned and what are the remaining challenges? 
+        American Journal of Human Genetics, 108(5), 764-785. PMID: 34133920</em></p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # File upload for disease analysis
+    st.markdown("### 📁 Upload Sequence for Disease Analysis")
+    uploaded_disease = st.file_uploader("Choose a FASTA file for disease analysis", type=["fa", "fasta", "txt"], 
+                                       help="Upload a FASTA file for disease-related repeat detection")
+    
+    use_example_disease = st.button("🧪 Use Example Disease Sequence", help="Load a sample sequence with disease-related repeats")
+    
+    disease_sequence = ""
+    
+    if uploaded_disease:
+        try:
+            disease_sequence = parse_fasta(uploaded_disease.read().decode())
+            st.success("✅ Sequence uploaded successfully for disease analysis!")
+        except:
+            st.error("❌ Invalid FASTA format. Please check your file.")
+    elif use_example_disease:
+        # Example sequence with CAG repeats (like in Huntington's)
+        disease_sequence = "ATCGATCGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGATCGATCG"
+        st.info("🧪 Example disease sequence loaded!")
+    
+    if disease_sequence:
+        st.markdown("### 🧬 Disease-Related Repeat Analysis Results")
+        
+        def detect_disease_repeats(seq):
+            results = []
+            for gene, info in DISEASE_MOTIFS.items():
+                repeat = info["repeat"]
+                pattern = f"({repeat}){{10,}}"  # Look for 10+ repeats
+                matches = list(re.finditer(pattern, seq, re.IGNORECASE))
+                
+                for match in matches:
+                    repeat_count = len(match.group(0)) // len(repeat)
+                    risk_level = "High Risk" if repeat_count >= info["threshold"] else "Normal Range"
+                    
+                    results.append({
+                        "Gene": gene,
+                        "Disease": info["disease"],
+                        "OMIM": info["omim"],
+                        "Repeat_Motif": repeat,
+                        "Start": match.start() + 1,
+                        "End": match.end(),
+                        "Repeat_Count": repeat_count,
+                        "Threshold": info["threshold"],
+                        "Risk_Level": risk_level,
+                        "Sequence": match.group(0)[:50] + "..." if len(match.group(0)) > 50 else match.group(0)
+                    })
+            return results
+        
+        disease_results = detect_disease_repeats(disease_sequence)
+        
+        if disease_results:
+            df_disease = pd.DataFrame(disease_results)
+            
+            # Summary metrics
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Disease Genes Detected", len(df_disease['Gene'].unique()))
+            with col2:
+                high_risk = len(df_disease[df_disease['Risk_Level'] == 'High Risk'])
+                st.metric("High Risk Repeats", high_risk)
+            with col3:
+                total_repeats = len(df_disease)
+                st.metric("Total Disease Repeats", total_repeats)
+            
+            # Display results table
+            st.markdown("#### 📊 Disease-Associated Repeat Expansions")
+            
+            # Color code by risk level
+            def highlight_risk(val):
+                if val == "High Risk":
+                    return 'background-color: #ffcccc; color: #cc0000; font-weight: bold;'
+                elif val == "Normal Range":
+                    return 'background-color: #ccffcc; color: #008000;'
+                return ''
+            
+            styled_disease_df = df_disease.style.applymap(highlight_risk, subset=['Risk_Level'])
+            st.dataframe(styled_disease_df, use_container_width=True)
+            
+            # Disease information cards
+            st.markdown("#### 🩺 Clinical Information")
+            for _, row in df_disease.iterrows():
+                with st.expander(f"{row['Disease']} ({row['Gene']}) - OMIM:{row['OMIM']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**Repeat Motif:** {row['Repeat_Motif']}")
+                        st.write(f"**Repeat Count:** {row['Repeat_Count']}")
+                        st.write(f"**Pathogenic Threshold:** {row['Threshold']} repeats")
+                    with col2:
+                        st.write(f"**Risk Level:** {row['Risk_Level']}")
+                        st.write(f"**Position:** {row['Start']}-{row['End']}")
+                        st.write(f"**OMIM Link:** https://omim.org/entry/{row['OMIM']}")
+        else:
+            st.info("No disease-associated repeat expansions detected in the provided sequence.")
+        
+        # Additional disease information
+        st.markdown("### 📚 Disease Categories Analyzed")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("""
+            **Trinucleotide Repeat Disorders:**
+            - Huntington Disease (HTT, CAG, OMIM:143100)
+            - Fragile X Syndrome (FMR1, CGG, OMIM:300624)
+            - Friedreich Ataxia (FXN, GAA, OMIM:229300)
+            - Spinocerebellar Ataxias (ATXN1-3, CAG, multiple OMIM entries)
+            """)
+        
+        with col2:
+            st.markdown("""
+            **Other Repeat Expansion Disorders:**
+            - Myotonic Dystrophy Type 1 (DMPK, CTG, OMIM:160900)
+            - Spinal and Bulbar Muscular Atrophy (AR, CAG, OMIM:313200)
+            - C9orf72-related ALS/FTD (C9orf72, GGGGCC, OMIM:105550)
+            """)
+
+elif page == "About":
+    # Information about DNA classes
+    st.markdown("---")
+    st.markdown("## 🧬 About Non-B DNA Structures - 10-Class, 22-Subclass Classification System")
+
+    st.markdown("""
+    The first standardized taxonomic framework for Non-B DNA structures includes examples from human sequences, including human mitochondrial DNA (NC_012920.1), human telomerase RNA (NR_003287.2), human ADAR1 gene (NM_001126112.2), and human SNRPN gene (NR_024540.1).
+    """)
+
+    info_cols = st.columns(2)
+
+    with info_cols[0]:
         st.markdown("""
-        <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-radius: 10px; margin: 2rem 0;">
-            <h3>🔍 No Non-B DNA Motifs Found</h3>
-            <p>The sequence appears to contain primarily standard B-form DNA structures.</p>
-            <p>Try uploading a different sequence or use the example sequence to see detected motifs.</p>
+        <div class="class-info" style="border-left-color: #FF6B6B;">
+            <h4>🔴 Curved DNA</h4>
+            <p>Global Curvature: DNA with intrinsic bending due to sequence-specific features. Local Curvature: Short-range bends caused by specific base arrangements.</p>
+        </div>
+        
+        <div class="class-info" style="border-left-color: #4ECDC4;">
+            <h4>🟢 Slipped DNA</h4>
+            <p>Direct Repeat: Formed when repetitive sequences slip during replication. STR: Short Tandem Repeats creating secondary structures.</p>
+        </div>
+        
+        <div class="class-info" style="border-left-color: #45B7D1;">
+            <h4>🔵 Cruciform DNA</h4>
+            <p>IR/Hairpin structures: Four-way junctions and stem-loop structures formed by inverted repeat sequences creating cross-like formations.</p>
+        </div>
+        
+        <div class="class-info" style="border-left-color: #96CEB4;">
+            <h4>🟦 R-loop</h4>
+            <p>RNA-DNA hybrids: Three-stranded structures where RNA displaces one DNA strand, forming RNA-DNA hybrid with displaced single-stranded DNA loop.</p>
+        </div>
+        
+        <div class="class-info" style="border-left-color: #FECA57;">
+            <h4>🟡 Triplex</h4>
+            <p>Triplex: Three-stranded DNA with third strand in major groove. Sticky DNA: Transient triplex intermediates with sequence-specific binding properties.</p>
         </div>
         """, unsafe_allow_html=True)
 
-# Information about DNA classes
-st.markdown("---")
-st.markdown("## 🧬 About Non-B DNA Structures")
-
-info_cols = st.columns(2)
-
-with info_cols[0]:
-    st.markdown("""
-    <div class="class-info" style="border-left-color: #FF6B6B;">
-        <h4>🔴 A-form DNA</h4>
-        <p>Right-handed double helix with wider major groove, typically forms under dehydrating conditions.</p>
-    </div>
-    
-    <div class="class-info" style="border-left-color: #4ECDC4;">
-        <h4>🟢 Z-DNA</h4>
-        <p>Left-handed double helix formed by alternating purine-pyrimidine sequences, especially CG repeats.</p>
-    </div>
-    
-    <div class="class-info" style="border-left-color: #45B7D1;">
-        <h4>🔵 G-Quadruplex</h4>
-        <p>Four-stranded structures formed by guanine-rich sequences, important in telomeres and gene regulation.</p>
-    </div>
-    
-    <div class="class-info" style="border-left-color: #96CEB4;">
-        <h4>🟦 i-motif</h4>
-        <p>Four-stranded structures formed by cytosine-rich sequences, pH-dependent and complementary to G-quadruplexes.</p>
-    </div>
-    
-    <div class="class-info" style="border-left-color: #FECA57;">
-        <h4>🟡 Triplex DNA</h4>
-        <p>Three-stranded structures formed by hydrogen bonding of a third strand to the major groove of duplex DNA.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-with info_cols[1]:
-    st.markdown("""
-    <div class="class-info" style="border-left-color: #FF9FF3;">
-        <h4>🟣 Hairpin Structures</h4>
-        <p>Single-stranded DNA folds back on itself forming stem-loop structures with palindromic sequences.</p>
-    </div>
-    
-    <div class="class-info" style="border-left-color: #F38BA8;">
-        <h4>🌸 Cruciform Structures</h4>
-        <p>Four-way junctions formed by large palindromic sequences, creating cross-like structures.</p>
-    </div>
-    
-    <div class="class-info" style="border-left-color: #A8E6CF;">
-        <h4>🟢 Slipped Structures</h4>
-        <p>Formed by repetitive sequences that can slip during replication, creating loops and bulges.</p>
-    </div>
-    
-    <div class="class-info" style="border-left-color: #FFB347;">
-        <h4>🟠 Bent DNA</h4>
-        <p>DNA with intrinsic curvature, often caused by AT-rich sequences and phased A-tracts.</p>
-    </div>
-    
-    <div class="class-info" style="border-left-color: #DDA0DD;">
-        <h4>🟣 Supercoiled DNA</h4>
-        <p>Over- or under-wound DNA resulting from topological strain, important for gene regulation.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    with info_cols[1]:
+        st.markdown("""
+        <div class="class-info" style="border-left-color: #FF9FF3;">
+            <h4>🟣 G-Quadruplex Family</h4>
+            <p>7 subclasses: Multimeric, Canonical, Relaxed, Bulged, Bipartite, Imperfect, G-Triplex. Four-stranded structures formed by guanine-rich sequences, critical for telomeres and gene regulation.</p>
+        </div>
+        
+        <div class="class-info" style="border-left-color: #F38BA8;">
+            <h4>🌸 i-Motif Family</h4>
+            <p>3 subclasses: Canonical, Relaxed, AC-motif. Four-stranded structures formed by cytosine-rich sequences, pH-dependent and complementary to G-quadruplexes.</p>
+        </div>
+        
+        <div class="class-info" style="border-left-color: #A8E6CF;">
+            <h4>🟢 Z-DNA</h4>
+            <p>Z-DNA: Left-handed double helix formed by alternating purine-pyrimidine sequences. eGZ: Extended G-Z junctions with unique structural properties.</p>
+        </div>
+        
+        <div class="class-info" style="border-left-color: #FFB347;">
+            <h4>🟠 Hybrid</h4>
+            <p>Dynamic overlap regions: Areas where multiple Non-B DNA structures can coexist or interchange, creating complex structural landscapes.</p>
+        </div>
+        
+        <div class="class-info" style="border-left-color: #DDA0DD;">
+            <h4>🟣 Non-B DNA Cluster Regions</h4>
+            <p>Hotspot regions: Genomic areas with high density of Non-B DNA forming sequences, often associated with replication stress and genomic instability.</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 st.markdown("""
 ---
 <div style="text-align: center; padding: 1rem; color: #666;">
     <p>🧬 Non-B DNA Motif Finder | Advanced Genomic Structure Analysis Tool</p>
-    <p>Detecting 10 Classes & 22 Subclasses of Non-Canonical DNA Structures</p>
+    <p>10-Class, 22-Subclass Classification System for Non-Canonical DNA Structures</p>
 </div>
 """, unsafe_allow_html=True)
