@@ -199,7 +199,7 @@ st.markdown("""
 # Sidebar navigation
 st.sidebar.title("Navigation")
 page = st.sidebar.selectbox("Choose a section:", 
-    ["Main Analysis", "Disease Analysis", "About"])
+    ["Main Analysis", "About"])
 
 if page == "Main Analysis":
     # Main header
@@ -266,6 +266,21 @@ if page == "Main Analysis":
         with st.expander("📋 View Sequence", expanded=False):
             st.text_area("Input Sequence", sequence_input, height=150)
 
+        # Analysis Options
+        st.markdown("### ⚙️ Analysis Options")
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            overlap_mode = st.radio(
+                "Motif Detection Mode:",
+                options=["Non-overlapping (Default)", "Overlapping"],
+                index=0,
+                help="Non-overlapping: Faster, finds distinct motifs. Overlapping: More comprehensive, finds all possible motifs including overlapping ones."
+            )
+        with col2:
+            st.metric("Selected Mode", "Non-overlap" if overlap_mode.startswith("Non") else "Overlap")
+        with col3:
+            st.info("💡 Non-overlapping is recommended for most analyses")
+
         # New 10-Class, 22-Subclass Classification System
         def non_overlapping_finditer(pattern, seq):
             regex = re.compile(pattern)
@@ -276,6 +291,17 @@ if page == "Main Analysis":
                     break
                 yield match
                 pos = match.end()
+
+        def overlapping_finditer(pattern, seq):
+            """Find all overlapping matches"""
+            regex = re.compile(pattern)
+            pos = 0
+            while pos < len(seq):
+                match = regex.search(seq, pos)
+                if not match:
+                    break
+                yield match
+                pos = match.start() + 1  # Move by 1 to find overlapping matches
 
         def get_significance_level(score, threshold_low=25, threshold_high=75):
             """Convert raw score to significance level"""
@@ -304,7 +330,9 @@ if page == "Main Analysis":
 
         def find_motif(seq, pattern, cls, subtype, score_method="None", score_func=None, group=0):
             results = []
-            for m in non_overlapping_finditer(pattern, seq):
+            # Choose finditer function based on user selection
+            finditer_func = non_overlapping_finditer if overlap_mode.startswith("Non") else overlapping_finditer
+            for m in finditer_func(pattern, seq):
                 score = score_func(m.group(group)) if score_func else 0
                 results.append(create_motif_dict(cls, subtype, m, seq, score_method, score, group))
             return results
@@ -761,7 +789,199 @@ if page == "Main Analysis":
             
             st.dataframe(styled_df, use_container_width=True, height=400)
             
+            # Disease Analysis Tab (Advanced Visualization Suite)
+            st.markdown("---")
+            st.markdown("### 🩺 Advanced Disease Analysis Suite")
+            st.markdown("""
+            <div class="disease-card">
+                <h4>🧬 Disease-Related Repeat Motif Detection Module</h4>
+                <p>Integrated clinical analysis of pathogenic repeat expansions using the same sequence input. 
+                This module identifies disease-associated repeat motifs and provides clinical risk assessment.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Run disease analysis on the same sequence
+            def detect_disease_repeats(seq):
+                results = []
+                for gene, info in DISEASE_MOTIFS.items():
+                    repeat = info["repeat"]
+                    pattern = f"({repeat}){{10,}}"  # Look for 10+ repeats
+                    # Use the same overlap mode as main analysis
+                    finditer_func = non_overlapping_finditer if overlap_mode.startswith("Non") else overlapping_finditer
+                    matches = list(finditer_func(pattern, seq))
+                    
+                    for match in matches:
+                        repeat_count = len(match.group(0)) // len(repeat)
+                        risk_level = "High Risk" if repeat_count >= info["threshold"] else "Normal Range"
+                        
+                        results.append({
+                            "Gene": gene,
+                            "Disease": info["disease"],
+                            "OMIM": info["omim"],
+                            "Repeat_Motif": repeat,
+                            "Start": match.start() + 1,
+                            "End": match.end(),
+                            "Repeat_Count": repeat_count,
+                            "Threshold": info["threshold"],
+                            "Risk_Level": risk_level,
+                            "Sequence": match.group(0)[:50] + "..." if len(match.group(0)) > 50 else match.group(0)
+                        })
+                return results
+            
+            disease_results = detect_disease_repeats(sequence_input)
+            
+            if disease_results:
+                df_disease = pd.DataFrame(disease_results)
+                
+                # Disease Analysis Summary metrics
+                dis_col1, dis_col2, dis_col3 = st.columns(3)
+                with dis_col1:
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #e53e3e;">
+                        <h3>{len(df_disease)}</h3>
+                        <p>Disease Repeats Found</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with dis_col2:
+                    high_risk_count = len(df_disease[df_disease['Risk_Level'] == 'High Risk'])
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #ff4444;">
+                        <h3>{high_risk_count}</h3>
+                        <p>High Risk Repeats</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with dis_col3:
+                    unique_genes = df_disease['Gene'].nunique()
+                    st.markdown(f"""
+                    <div class="metric-card" style="border-left: 4px solid #44ff44;">
+                        <h3>{unique_genes}</h3>
+                        <p>Genes Affected</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Disease Analysis Results with filtering
+                st.markdown("#### 📋 Disease Analysis Results")
+                
+                # Risk level filter
+                risk_filter = st.selectbox(
+                    "Filter by Risk Level:",
+                    options=['All'] + list(df_disease['Risk_Level'].unique()),
+                    index=0,
+                    key="disease_risk_filter"
+                )
+                
+                filtered_disease_df = df_disease if risk_filter == 'All' else df_disease[df_disease['Risk_Level'] == risk_filter]
+                
+                # Style disease results
+                def highlight_risk(val):
+                    if val == 'High Risk':
+                        return 'background-color: #ff4444; color: white; font-weight: bold;'
+                    else:
+                        return 'background-color: #44ff44; color: white; font-weight: bold;'
+                
+                def highlight_gene(val):
+                    return 'background-color: #667eea; color: white; font-weight: bold;'
+                
+                styled_disease_df = filtered_disease_df.style.applymap(highlight_risk, subset=['Risk_Level']) \
+                                                            .applymap(highlight_gene, subset=['Gene']) \
+                                                            .format({'Repeat_Count': '{:.0f}', 'Threshold': '{:.0f}'})
+                
+                st.dataframe(styled_disease_df, use_container_width=True)
+                
+                # Disease Analysis Visualizations
+                st.markdown("#### 📈 Disease Analysis Visualizations")
+                dis_viz_tab1, dis_viz_tab2, dis_viz_tab3 = st.tabs(["🎯 Risk Assessment", "📊 Repeat Counts", "🧬 Gene Analysis"])
+                
+                with dis_viz_tab1:
+                    # Risk level distribution
+                    risk_counts = filtered_disease_df['Risk_Level'].value_counts()
+                    
+                    fig_risk = px.pie(
+                        values=risk_counts.values,
+                        names=risk_counts.index,
+                        title="Disease Risk Level Distribution",
+                        color=risk_counts.index,
+                        color_discrete_map={
+                            'High Risk': '#ff4444',
+                            'Normal Range': '#44ff44'
+                        }
+                    )
+                    fig_risk.update_traces(textposition='inside', textinfo='percent+label')
+                    fig_risk.update_layout(height=400)
+                    st.plotly_chart(fig_risk, use_container_width=True)
+                
+                with dis_viz_tab2:
+                    # Repeat count vs threshold comparison
+                    fig_repeat = px.scatter(
+                        filtered_disease_df,
+                        x='Gene',
+                        y='Repeat_Count',
+                        color='Risk_Level',
+                        size='Repeat_Count',
+                        hover_data=['Disease', 'Threshold'],
+                        title="Repeat Counts vs. Pathogenic Thresholds",
+                        color_discrete_map={
+                            'High Risk': '#ff4444',
+                            'Normal Range': '#44ff44'
+                        }
+                    )
+                    
+                    # Add threshold lines
+                    for _, row in filtered_disease_df.iterrows():
+                        fig_repeat.add_hline(
+                            y=row['Threshold'],
+                            line_dash="dash",
+                            line_color="red",
+                            annotation_text=f"{row['Gene']} threshold: {row['Threshold']}"
+                        )
+                    
+                    fig_repeat.update_layout(height=400, xaxis_tickangle=-45)
+                    st.plotly_chart(fig_repeat, use_container_width=True)
+                
+                with dis_viz_tab3:
+                    # Gene-specific analysis
+                    gene_stats = filtered_disease_df.groupby('Gene').agg({
+                        'Repeat_Count': ['mean', 'max'],
+                        'Risk_Level': lambda x: (x == 'High Risk').sum(),
+                        'Disease': 'first'
+                    }).round(2)
+                    
+                    gene_stats.columns = ['Avg Repeats', 'Max Repeats', 'High Risk Count', 'Disease']
+                    
+                    st.markdown("##### 📋 Gene-Specific Statistics")
+                    st.dataframe(gene_stats, use_container_width=True)
+                    
+                    # Gene distribution bar chart
+                    gene_counts = filtered_disease_df['Gene'].value_counts()
+                    fig_genes = px.bar(
+                        x=gene_counts.index,
+                        y=gene_counts.values,
+                        title="Disease Gene Detection Frequency",
+                        labels={'x': 'Gene', 'y': 'Detection Count'}
+                    )
+                    fig_genes.update_layout(height=400)
+                    st.plotly_chart(fig_genes, use_container_width=True)
+                
+                # Clinical Information
+                st.markdown("#### 🩺 Clinical Information")
+                for _, row in filtered_disease_df.iterrows():
+                    with st.expander(f"{row['Disease']} ({row['Gene']}) - OMIM:{row['OMIM']}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.markdown(f"**Repeat Motif:** {row['Repeat_Motif']}")
+                            st.markdown(f"**Repeat Count:** {row['Repeat_Count']}")
+                            st.markdown(f"**Risk Level:** {row['Risk_Level']}")
+                        with col2:
+                            st.markdown(f"**Position:** {row['Start']}-{row['End']}")
+                            st.markdown(f"**Threshold:** {row['Threshold']} repeats")
+                            st.markdown(f"**Sequence:** {row['Sequence']}")
+            else:
+                st.info("🔍 No disease-related repeat motifs detected in this sequence.")
+            
             # Download section
+            st.markdown("---")
             st.markdown("### 💾 Download Results")
             col1, col2, col3 = st.columns(3)
             
@@ -842,281 +1062,6 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 <p>Try uploading a different sequence or use the example sequence to see detected motifs.</p>
             </div>
             """, unsafe_allow_html=True)
-
-elif page == "Disease Analysis":
-    st.markdown("""
-    <div class="main-header">
-        <h1>🩺 Disease-Related Repeat Motif Detection</h1>
-        <p>Clinical Analysis of Pathogenic Repeat Expansions</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="disease-card">
-        <h3>🧬 Disease-Related Repeat Motif Detection Module</h3>
-        <p>This module provides a comprehensive computational framework for identifying and clinically annotating pathogenic repeat expansions in DNA sequences, 
-        with a focus on trinucleotide repeat disorders, fragile sites, and autism spectrum disorder (ASD)-related variants.</p>
-        
-        <p>The detection and annotation logic are grounded in clinical thresholds and inheritance patterns from research by 
-        <strong>Depienne and Mandel (2021)</strong>, reflecting on three decades of research into repeat expansion disorders.</p>
-        
-        <p><em>Reference: Depienne, C., & Mandel, J.-L. (2021). 30 years of repeat expansion disorders: What have we learned and what are the remaining challenges? 
-        American Journal of Human Genetics, 108(5), 764-785. PMID: 34133920</em></p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # File upload for disease analysis
-    st.markdown("### 📁 Upload Sequence for Disease Analysis")
-    uploaded_disease = st.file_uploader("Choose a FASTA file for disease analysis", type=["fa", "fasta", "txt"], 
-                                       help="Upload a FASTA file for disease-related repeat detection")
-    
-    use_example_disease = st.button("🧪 Use Example Disease Sequence", help="Load a sample sequence with disease-related repeats")
-    
-    disease_sequence = ""
-    
-    if uploaded_disease:
-        try:
-            disease_sequence = parse_fasta(uploaded_disease.read().decode())
-            st.success("✅ Sequence uploaded successfully for disease analysis!")
-        except:
-            st.error("❌ Invalid FASTA format. Please check your file.")
-    elif use_example_disease:
-        # Example sequence with CAG repeats (like in Huntington's)
-        disease_sequence = "ATCGATCGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGCAGATCGATCG"
-        st.info("🧪 Example disease sequence loaded!")
-    
-    if disease_sequence:
-        st.markdown("### 🧬 Disease-Related Repeat Analysis Results")
-        
-        def detect_disease_repeats(seq):
-            results = []
-            for gene, info in DISEASE_MOTIFS.items():
-                repeat = info["repeat"]
-                pattern = f"({repeat}){{10,}}"  # Look for 10+ repeats
-                matches = list(re.finditer(pattern, seq, re.IGNORECASE))
-                
-                for match in matches:
-                    repeat_count = len(match.group(0)) // len(repeat)
-                    risk_level = "High Risk" if repeat_count >= info["threshold"] else "Normal Range"
-                    
-                    results.append({
-                        "Gene": gene,
-                        "Disease": info["disease"],
-                        "OMIM": info["omim"],
-                        "Repeat_Motif": repeat,
-                        "Start": match.start() + 1,
-                        "End": match.end(),
-                        "Repeat_Count": repeat_count,
-                        "Threshold": info["threshold"],
-                        "Risk_Level": risk_level,
-                        "Sequence": match.group(0)[:50] + "..." if len(match.group(0)) > 50 else match.group(0)
-                    })
-            return results
-        
-        disease_results = detect_disease_repeats(disease_sequence)
-        
-        if disease_results:
-            df_disease = pd.DataFrame(disease_results)
-            
-            # Summary metrics
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Disease Genes Detected", len(df_disease['Gene'].unique()))
-            with col2:
-                high_risk = len(df_disease[df_disease['Risk_Level'] == 'High Risk'])
-                st.metric("High Risk Repeats", high_risk)
-            with col3:
-                total_repeats = len(df_disease)
-                st.metric("Total Disease Repeats", total_repeats)
-            
-            # Enhanced Disease Analysis Results with Visualizations
-            st.markdown("#### 📊 Disease-Associated Repeat Expansions")
-            
-            # Add filtering and download options for disease results
-            dis_col1, dis_col2, dis_col3 = st.columns(3)
-            
-            with dis_col1:
-                risk_filter = st.selectbox(
-                    "Filter by Risk Level:",
-                    options=['All', 'High Risk', 'Normal Range'],
-                    index=0,
-                    key="disease_risk_filter"
-                )
-            
-            with dis_col2:
-                # Disease results download - CSV
-                disease_csv = df_disease.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "📄 Download Disease Results CSV",
-                    data=disease_csv,
-                    file_name=f"disease_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv",
-                    key="disease_csv_download"
-                )
-            
-            with dis_col3:
-                # Disease results download - Excel
-                disease_output = io.BytesIO()
-                with pd.ExcelWriter(disease_output, engine='xlsxwriter') as writer:
-                    df_disease.to_excel(writer, sheet_name='Disease Analysis', index=False)
-                    
-                    # Get workbook and worksheet for formatting
-                    workbook = writer.book
-                    worksheet = writer.sheets['Disease Analysis']
-                    
-                    # Add conditional formatting for risk levels
-                    high_risk_format = workbook.add_format({'bg_color': '#ffcccc', 'font_color': '#cc0000'})
-                    normal_format = workbook.add_format({'bg_color': '#ccffcc', 'font_color': '#008000'})
-                    
-                disease_excel_data = disease_output.getvalue()
-                st.download_button(
-                    "📊 Download Disease Results Excel",
-                    data=disease_excel_data,
-                    file_name=f"disease_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key="disease_excel_download"
-                )
-            
-            # Apply risk filter
-            filtered_disease_df = df_disease if risk_filter == 'All' else df_disease[df_disease['Risk_Level'] == risk_filter]
-            
-            # Enhanced color coding for disease results
-            def highlight_risk(val):
-                if val == "High Risk":
-                    return 'background-color: #ffcccc; color: #cc0000; font-weight: bold;'
-                elif val == "Normal Range":
-                    return 'background-color: #ccffcc; color: #008000;'
-                return ''
-            
-            def highlight_gene(val):
-                gene_colors = {
-                    'HTT': 'background-color: #ff9999;',
-                    'ATXN1': 'background-color: #99ccff;',
-                    'ATXN2': 'background-color: #99ffcc;',
-                    'ATXN3': 'background-color: #ffcc99;',
-                    'AR': 'background-color: #cc99ff;'
-                }
-                return gene_colors.get(val, '')
-            
-            styled_disease_df = filtered_disease_df.style.applymap(highlight_risk, subset=['Risk_Level']) \
-                                                        .applymap(highlight_gene, subset=['Gene']) \
-                                                        .format({'Repeat_Count': '{:.0f}', 'Threshold': '{:.0f}'})
-            
-            st.dataframe(styled_disease_df, use_container_width=True)
-            
-            # Add Disease Analysis Visualizations
-            st.markdown("#### 📈 Disease Analysis Visualizations")
-            
-            # Create tabs for different disease visualizations
-            dis_viz_tab1, dis_viz_tab2, dis_viz_tab3 = st.tabs(["🎯 Risk Assessment", "📊 Repeat Counts", "🧬 Gene Analysis"])
-            
-            with dis_viz_tab1:
-                # Risk level distribution
-                risk_counts = filtered_disease_df['Risk_Level'].value_counts()
-                
-                fig_risk = px.pie(
-                    values=risk_counts.values,
-                    names=risk_counts.index,
-                    title="Risk Level Distribution",
-                    color=risk_counts.index,
-                    color_discrete_map={
-                        'High Risk': '#ff4444',
-                        'Normal Range': '#44ff44'
-                    }
-                )
-                fig_risk.update_traces(textposition='inside', textinfo='percent+label')
-                fig_risk.update_layout(height=400)
-                st.plotly_chart(fig_risk, use_container_width=True)
-            
-            with dis_viz_tab2:
-                # Repeat count vs threshold comparison
-                fig_repeat = px.scatter(
-                    filtered_disease_df,
-                    x='Gene',
-                    y='Repeat_Count',
-                    color='Risk_Level',
-                    size='Repeat_Count',
-                    hover_data=['Disease', 'Threshold'],
-                    title="Repeat Counts vs. Pathogenic Thresholds",
-                    color_discrete_map={
-                        'High Risk': '#ff4444',
-                        'Normal Range': '#44ff44'
-                    }
-                )
-                
-                # Add threshold lines
-                for _, row in filtered_disease_df.iterrows():
-                    fig_repeat.add_hline(
-                        y=row['Threshold'],
-                        line_dash="dash",
-                        line_color="red",
-                        annotation_text=f"{row['Gene']} threshold: {row['Threshold']}"
-                    )
-                
-                fig_repeat.update_layout(height=400, xaxis_tickangle=-45)
-                st.plotly_chart(fig_repeat, use_container_width=True)
-            
-            with dis_viz_tab3:
-                # Gene-specific analysis
-                gene_stats = filtered_disease_df.groupby('Gene').agg({
-                    'Repeat_Count': ['mean', 'max'],
-                    'Risk_Level': lambda x: (x == 'High Risk').sum(),
-                    'Disease': 'first'
-                }).round(2)
-                
-                gene_stats.columns = ['Avg Repeats', 'Max Repeats', 'High Risk Count', 'Disease']
-                
-                st.markdown("##### 📋 Gene-Specific Statistics")
-                st.dataframe(gene_stats, use_container_width=True)
-                
-                # Gene distribution bar chart
-                gene_counts = filtered_disease_df['Gene'].value_counts()
-                fig_genes = px.bar(
-                    x=gene_counts.index,
-                    y=gene_counts.values,
-                    title="Disease Gene Detection Frequency",
-                    labels={'x': 'Gene', 'y': 'Detection Count'}
-                )
-                fig_genes.update_layout(height=400)
-                st.plotly_chart(fig_genes, use_container_width=True)
-            
-            # Disease information cards
-            st.markdown("#### 🩺 Clinical Information")
-            for _, row in df_disease.iterrows():
-                with st.expander(f"{row['Disease']} ({row['Gene']}) - OMIM:{row['OMIM']}"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"**Repeat Motif:** {row['Repeat_Motif']}")
-                        st.write(f"**Repeat Count:** {row['Repeat_Count']}")
-                        st.write(f"**Pathogenic Threshold:** {row['Threshold']} repeats")
-                    with col2:
-                        st.write(f"**Risk Level:** {row['Risk_Level']}")
-                        st.write(f"**Position:** {row['Start']}-{row['End']}")
-                        st.write(f"**OMIM Link:** https://omim.org/entry/{row['OMIM']}")
-        else:
-            st.info("No disease-associated repeat expansions detected in the provided sequence.")
-        
-        # Additional disease information
-        st.markdown("### 📚 Disease Categories Analyzed")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            **Trinucleotide Repeat Disorders:**
-            - Huntington Disease (HTT, CAG, OMIM:143100)
-            - Fragile X Syndrome (FMR1, CGG, OMIM:300624)
-            - Friedreich Ataxia (FXN, GAA, OMIM:229300)
-            - Spinocerebellar Ataxias (ATXN1-3, CAG, multiple OMIM entries)
-            """)
-        
-        with col2:
-            st.markdown("""
-            **Other Repeat Expansion Disorders:**
-            - Myotonic Dystrophy Type 1 (DMPK, CTG, OMIM:160900)
-            - Spinal and Bulbar Muscular Atrophy (AR, CAG, OMIM:313200)
-            - C9orf72-related ALS/FTD (C9orf72, GGGGCC, OMIM:105550)
-            """)
 
 elif page == "About":
     # Comprehensive documentation about scoring systems and detection logic
