@@ -13,6 +13,9 @@ def wrap(seq: str, width=60) -> str:
     return "\n".join([seq[i:i+width] for i in range(0, len(seq), width)])
 
 def g4hunter_score(seq: str) -> float:
+    # Input validation
+    if not isinstance(seq, str):
+        return 0.0
     vals = []
     n = len(seq)
     i = 0
@@ -40,17 +43,26 @@ def g4hunter_score(seq: str) -> float:
     return np.mean(np.array(vals)) if vals else 0.0
 
 def zseeker_score(seq: str) -> float:
+    # Input validation
+    if not isinstance(seq, str):
+        return 0.0
     dinucs = re.findall(r"(GC|CG|GT|TG|AC|CA)", seq)
     return len(dinucs) / (len(seq)/2) if len(seq) >= 2 else 0.0
 
 def triplex_score(seq: str) -> float:
     """Score for triplex DNA formation potential"""
+    # Input validation
+    if not isinstance(seq, str):
+        return 0.0
     purine_runs = len(re.findall(r"[AG]{10,}", seq))
     pyrimidine_runs = len(re.findall(r"[CT]{10,}", seq))
     return (purine_runs + pyrimidine_runs) / len(seq) * 100 if len(seq) > 0 else 0.0
 
 def hairpin_score(seq: str) -> float:
     """Score for hairpin/cruciform potential based on palindrome strength"""
+    # Input validation
+    if not isinstance(seq, str):
+        return 0.0
     if len(seq) < 6:
         return 0.0
     # Simple scoring based on inverted repeat potential
@@ -61,16 +73,25 @@ def hairpin_score(seq: str) -> float:
 
 def at_content(seq: str) -> float:
     """Calculate AT content"""
+    # Input validation
+    if not isinstance(seq, str):
+        return 0.0
     at_count = seq.count('A') + seq.count('T')
     return at_count / len(seq) * 100 if len(seq) > 0 else 0.0
 
 def gc_content(seq: str) -> float:
     """Calculate GC content"""
+    # Input validation
+    if not isinstance(seq, str):
+        return 0.0
     gc_count = seq.count('G') + seq.count('C')
     return gc_count / len(seq) * 100 if len(seq) > 0 else 0.0
 
 def imotif_score(seq: str) -> float:
     """Score for i-motif formation potential"""
+    # Input validation
+    if not isinstance(seq, str):
+        return 0.0
     c_runs = re.findall(r"C{3,}", seq)
     if not c_runs:
         return 0.0
