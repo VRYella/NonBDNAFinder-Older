@@ -99,19 +99,20 @@ def imotif_score(seq: str) -> float:
     return total_score / len(seq) * 100
 
 # ======================
-# Color Scheme for DNA Classes (Updated for New Classification)
+# Wong Colorblind-Friendly Color Scheme for DNA Classes
+# Based on Wong, B. (2011) Nature Methods - Colorblind-friendly palette
 # ======================
 CLASS_COLORS = {
-    'Curved DNA': '#FF6B6B',                    # Red
-    'Slipped DNA': '#4ECDC4',                   # Teal
-    'Cruciform DNA': '#45B7D1',                 # Sky blue
-    'R-loop': '#96CEB4',                        # Mint green
-    'Triplex': '#FECA57',                       # Yellow
-    'G-Quadruplex Family': '#FF9FF3',           # Pink
-    'i-Motif Family': '#F38BA8',                # Rose
-    'Z-DNA': '#A8E6CF',                         # Light green
-    'Hybrid': '#FFB347',                        # Orange
-    'Non-B DNA Cluster Regions': '#DDA0DD'     # Plum
+    'Curved DNA': '#E69F00',                        # Orange (Wong palette)
+    'Slipped DNA': '#56B4E9',                       # Sky Blue (Wong palette)
+    'Cruciform DNA': '#009E73',                     # Bluish Green (Wong palette)
+    'R-loop': '#F0E442',                            # Yellow (Wong palette)
+    'Triplex': '#0072B2',                           # Blue (Wong palette)
+    'G-Quadruplex Family': '#D55E00',               # Vermillion (Wong palette)
+    'i-Motif Family': '#CC79A7',                    # Reddish Purple (Wong palette)
+    'Z-DNA': '#848484',                             # Gray (adapted for accessibility)
+    'Hybrid': '#E69F00',                            # Orange variant (Wong palette)
+    'Non-B DNA Cluster Regions': '#56B4E9'         # Sky Blue variant (Wong palette)
 }
 
 # ======================
