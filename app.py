@@ -1380,7 +1380,13 @@ elif page == "About":
     """)
     
     # Add comprehensive documentation tabs
-    doc_tab1, doc_tab2, doc_tab3, doc_tab4 = st.tabs(["🏗️ Structure Classes", "🎯 Scoring Systems", "🔍 Detection Logic", "📊 Pipeline"])
+    doc_tab1, doc_tab2, doc_tab3, doc_tab4, doc_tab5 = st.tabs([
+        "🏗️ Structure Classes", 
+        "🎯 Scoring Systems", 
+        "🔍 Detection Logic", 
+        "📊 Pipeline",
+        "📚 References"
+    ])
     
     with doc_tab1:
         # Original structure information
@@ -1731,6 +1737,129 @@ elif page == "About":
         - Hexanucleotide repeats (GGGGCC)
         - Other pathogenic repeat expansions (CTG)
         """)
+    
+    with doc_tab5:
+        st.markdown("## 📚 Scientific References")
+        
+        st.markdown("""
+        ### Key Publications on Non-B DNA Structures
+        
+        **Foundational Works:**
+        """)
+        
+        references = [
+            {
+                "title": "Molecular structure of nucleic acids; a structure for deoxyribose nucleic acid",
+                "authors": "Watson, J. D. & Crick, F. H.",
+                "journal": "Nature",
+                "year": "1953",
+                "significance": "Foundational description of B-form DNA structure"
+            },
+            {
+                "title": "Dynamic alternative DNA structures in biology and disease", 
+                "authors": "Wang, G. & Vasquez, K. M.",
+                "journal": "Nat Rev Genet",
+                "year": "2023",
+                "significance": "Comprehensive review of non-B DNA in biological systems"
+            },
+            {
+                "title": "Detection of alternative DNA structures and its implications for human disease",
+                "authors": "Matos-Rodrigues, G., Hisey, J. A., Nussenzweig, A. & Mirkin, S. M.",
+                "journal": "Mol Cell",
+                "year": "2023", 
+                "significance": "Modern methods for detecting non-B DNA structures"
+            },
+            {
+                "title": "Noncanonical DNA structures are drivers of genome evolution",
+                "authors": "Makova, K. D. & Weissensteiner, M. H.",
+                "journal": "Trends Genet",
+                "year": "2023",
+                "significance": "Role of non-B DNA in evolutionary processes"
+            },
+            {
+                "title": "Formation of parallel four-stranded complexes by guanine-rich motifs in DNA",
+                "authors": "Sen, D. & Gilbert, W.",
+                "journal": "Nature", 
+                "year": "1988",
+                "significance": "Discovery of G-quadruplex structures"
+            },
+            {
+                "title": "Detection of G-quadruplex DNA in mammalian cells",
+                "authors": "Henderson, A. et al.",
+                "journal": "Nucleic Acids Res",
+                "year": "2017",
+                "significance": "In vivo detection of G-quadruplexes"
+            },
+            {
+                "title": "I-motif DNA structures are formed in the nuclei of human cells",
+                "authors": "Zeraati, M. et al.",
+                "journal": "Nat Chem",
+                "year": "2018",
+                "significance": "First demonstration of i-motifs in living cells"
+            },
+            {
+                "title": "R-loop formation is a distinctive characteristic of unmethylated human CpG island promoters",
+                "authors": "Ginno, P. A., Lott, P. L., Christensen, H. C., Korf, I. & Chédin, F.",
+                "journal": "Mol Cell",
+                "year": "2012",
+                "significance": "R-loop formation in gene regulation"
+            },
+            {
+                "title": "Molecular structure of a left-handed double helical DNA fragment at atomic resolution",
+                "authors": "Wang, A. H. et al.",
+                "journal": "Nature",
+                "year": "1979",
+                "significance": "First crystal structure of Z-DNA"
+            },
+            {
+                "title": "High-throughput characterization of the role of non-B DNA motifs on promoter function",
+                "authors": "Georgakopoulos-Soares, I. et al.",
+                "journal": "Cell Genom",
+                "year": "2022",
+                "significance": "Systematic analysis of non-B DNA in gene regulation"
+            }
+        ]
+        
+        for i, ref in enumerate(references, 1):
+            st.markdown(f"""
+            <div style="background: white; padding: 1rem; border-radius: 8px; margin: 0.5rem 0; 
+                       border-left: 4px solid #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <h5 style="margin: 0; color: #667eea;">{i}. {ref['title']}</h5>
+                <p style="margin: 0.5rem 0; color: #666;"><strong>{ref['authors']}</strong></p>
+                <p style="margin: 0.5rem 0; color: #888;"><em>{ref['journal']}</em> ({ref['year']})</p>
+                <p style="margin: 0.5rem 0 0 0; color: #555; font-size: 0.9em;"><strong>Significance:</strong> {ref['significance']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        ### Computational Methods and Tools
+        
+        **Scoring Algorithms:**
+        - **G4Hunter**: Bedrat, A., Lacroix, L., & Mergny, J. L. (2016). Re-evaluation of G-quadruplex propensity with G4Hunter. *Nucleic Acids Res*, 44(4), 1746-1759.
+        - **ZSeeker**: Ho, P. S., Ellison, M. J., Quigley, G. J. & Rich, A. (1986). A computer aided thermodynamic approach for predicting the formation of Z-DNA. *EMBO J*, 5, 2737-2744.
+        - **Triplexator**: Buske, F. A., Bauer, D. C., Mattick, J. S. & Bailey, T. L. (2012). Triplexator: detecting nucleic acid triple helices. *Genome Res*, 22, 1372-1381.
+        
+        **Database Resources:**
+        - **Non-B DB**: Cer, R. Z. et al. (2013). Non-B DB v2.0: a database of predicted non-B DNA-forming motifs. *Nucleic Acids Res*, 41, D94-100.
+        - **G4IPDB**: Vorlícková, M. et al. (2012). Circular dichroism and guanine quadruplexes. *Methods*, 57, 64-75.
+        
+        ### Citation
+        If you use NonBDNAFinder in your research, please cite:
+        
+        > **NonBDNAFinder: A Comprehensive Tool for Non-B DNA Structure Detection and Analysis**  
+        > *[Publication details to be added upon manuscript submission]*
+        """)
+        
+        # Add download button for references
+        ref_text = "\\n".join([f"{i}. {ref['authors']} ({ref['year']}). {ref['title']}. {ref['journal']}." 
+                              for i, ref in enumerate(references, 1)])
+        
+        st.download_button(
+            "📄 Download References (Plain Text)",
+            data=ref_text,
+            file_name=f"NonBDNAFinder_References_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain"
+        )
         
         # Add download button for complete documentation
         doc_content = """
