@@ -1056,86 +1056,158 @@ if page == "Main Analysis":
             else:
                 st.info("No disease-related repeat motifs detected in this sequence.")
             
-            # Download section
+            # Professional Export and Reporting Section
             st.markdown("---")
-            st.markdown("### Download Results")
+            st.markdown("### Export and Reporting")
+            
+            # Create audit trail information
+            analysis_metadata = {
+                "Analysis_Date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "Analysis_Type": "Non-overlapping Detection",
+                "Sequence_Length": len(sequence_input),
+                "Total_Motifs": len(df),
+                "Classes_Detected": len(df['Class'].unique()),
+                "Subclasses_Found": len(df['Subtype'].unique()),
+                "Coverage_Percent": f"{(df['Length'].sum() / len(sequence_input) * 100):.1f}%",
+                "Software_Version": "NonBDNAFinder v1.0",
+                "Classification_System": "10-Class, 22-Subclass Framework"
+            }
+            
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                csv = df.to_csv(index=False).encode("utf-8")
+                # Enhanced CSV export with metadata
+                csv_content = "# NonBDNAFinder Analysis Report\n"
+                csv_content += "# Generated on: " + analysis_metadata["Analysis_Date"] + "\n"
+                csv_content += "# Sequence Length: " + str(analysis_metadata["Sequence_Length"]) + " bp\n"
+                csv_content += "# Total Motifs: " + str(analysis_metadata["Total_Motifs"]) + "\n"
+                csv_content += "# Coverage: " + analysis_metadata["Coverage_Percent"] + "\n\n"
+                csv_content += df.to_csv(index=False)
+                
                 st.download_button(
-                    "Download CSV",
-                    data=csv,
-                    file_name=f"non_b_dna_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
+                    "Download Scientific CSV",
+                    data=csv_content.encode("utf-8"),
+                    file_name=f"NonBDNAFinder_Analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    help="CSV format with analysis metadata header"
                 )
             
             with col2:
-                # Create Excel file
+                # Professional Excel report with multiple sheets
                 output = io.BytesIO()
                 with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    df.to_excel(writer, sheet_name='Non-B DNA Results', index=False)
+                    # Main results sheet
+                    df.to_excel(writer, sheet_name='Analysis_Results', index=False)
                     
-                    # Get workbook and worksheet
+                    # Summary statistics sheet
+                    summary_stats = {
+                        'Metric': ['Sequence Length (bp)', 'Total Motifs', 'DNA Classes', 'Subclasses', 'Coverage (%)', 'GC Content (%)', 'AT Content (%)'],
+                        'Value': [len(sequence_input), len(df), len(df['Class'].unique()), len(df['Subtype'].unique()), 
+                                f"{(df['Length'].sum() / len(sequence_input) * 100):.1f}", 
+                                f"{gc_content(sequence_input):.1f}", f"{at_content(sequence_input):.1f}"]
+                    }
+                    pd.DataFrame(summary_stats).to_excel(writer, sheet_name='Summary_Statistics', index=False)
+                    
+                    # Class distribution sheet
+                    class_dist = df['Class'].value_counts().reset_index()
+                    class_dist.columns = ['DNA_Class', 'Count']
+                    class_dist['Percentage'] = (class_dist['Count'] / len(df) * 100).round(2)
+                    class_dist.to_excel(writer, sheet_name='Class_Distribution', index=False)
+                    
+                    # Metadata sheet
+                    metadata_df = pd.DataFrame(list(analysis_metadata.items()), columns=['Parameter', 'Value'])
+                    metadata_df.to_excel(writer, sheet_name='Analysis_Metadata', index=False)
+                    
+                    # Professional formatting
                     workbook = writer.book
-                    worksheet = writer.sheets['Non-B DNA Results']
                     
-                    # Add some formatting
+                    # Header format
                     header_format = workbook.add_format({
                         'bold': True,
                         'text_wrap': True,
                         'valign': 'top',
-                        'fg_color': '#667eea',
+                        'fg_color': '#495057',
                         'font_color': 'white',
-                        'border': 1
+                        'border': 1,
+                        'font_size': 11
                     })
                     
-                    # Apply header format
-                    for col_num, value in enumerate(df.columns.values):
-                        worksheet.write(0, col_num, value, header_format)
+                    # Apply formatting to all sheets
+                    for sheet_name in writer.sheets:
+                        worksheet = writer.sheets[sheet_name]
+                        for col_num, value in enumerate(pd.read_excel(output, sheet_name=sheet_name, nrows=0).columns):
+                            worksheet.write(0, col_num, value, header_format)
+                            worksheet.set_column(col_num, col_num, 15)  # Set column width
                         
                 excel_data = output.getvalue()
                 
                 st.download_button(
-                    "Download Excel",
+                    "Download Professional Report",
                     data=excel_data,
-                    file_name=f"non_b_dna_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    file_name=f"NonBDNAFinder_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    help="Multi-sheet Excel report with analysis metadata and statistics"
                 )
             
             with col3:
-                # Create summary report
-                summary_text = f"""
-Non-B DNA Analysis Summary
-=========================
-Sequence Length: {len(sequence_input)} bp
-GC Content: {gc_content(sequence_input):.1f}%
-AT Content: {at_content(sequence_input):.1f}%
+                # Comprehensive summary report
+                summary_text = f"""NonBDNAFinder Scientific Analysis Report
+=====================================
 
-Total Motifs Found: {len(df)}
-Classes Detected: {unique_classes}
-Subclasses Found: {unique_subtypes}
-Sequence Coverage: {coverage:.1f}%
+Analysis Information:
+- Date: {analysis_metadata['Analysis_Date']}
+- Software: {analysis_metadata['Software_Version']}
+- Classification: {analysis_metadata['Classification_System']}
 
-Class Breakdown:
-{chr(10).join([f"- {cls}: {count} motifs" for cls, count in class_counts.items()])}
+Input Sequence:
+- Length: {analysis_metadata['Sequence_Length']} bp
+- GC Content: {gc_content(sequence_input):.1f}%
+- AT Content: {at_content(sequence_input):.1f}%
 
-Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-                """
+Analysis Results:
+- Detection Mode: {analysis_metadata['Analysis_Type']}
+- Total Motifs: {analysis_metadata['Total_Motifs']}
+- DNA Classes: {analysis_metadata['Classes_Detected']}
+- Subclasses: {analysis_metadata['Subclasses_Found']}
+- Sequence Coverage: {analysis_metadata['Coverage_Percent']}
+
+Class Distribution:
+{chr(10).join([f"- {cls}: {count} motifs ({count/len(df)*100:.1f}%)" 
+               for cls, count in df['Class'].value_counts().items()])}
+
+Scoring Methods Applied:
+- G4Hunter: G-quadruplex detection
+- AT Content: Curved DNA assessment  
+- GC Content: Z-DNA and R-loop evaluation
+- Repeat Score: Slipped DNA analysis
+- Hairpin Score: Cruciform DNA detection
+- Triplex Score: Triplex structure assessment
+- i-motif Score: i-Motif family analysis
+
+Quality Metrics:
+- Significance Distribution:
+{chr(10).join([f"  - {sig}: {count} motifs" 
+               for sig, count in df['Significance'].value_counts().items()])}
+
+Generated by NonBDNAFinder
+Scientific Analysis of Non-B DNA Structures
+10-Class, 22-Subclass Classification System
+"""
                 
                 st.download_button(
-                    "Download Summary",
+                    "Download Analysis Summary",
                     data=summary_text,
-                    file_name=f"non_b_dna_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
-                    mime="text/plain"
+                    file_name=f"NonBDNAFinder_Summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain",
+                    help="Comprehensive text summary of analysis results"
                 )
         
         else:
             st.markdown("""
-            <div style="text-align: center; padding: 3rem; background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); border-radius: 10px; margin: 2rem 0;">
-                <h3>🔍 No Non-B DNA Motifs Found</h3>
-                <p>The sequence appears to contain primarily standard B-form DNA structures.</p>
-                <p>Try uploading a different sequence or use the example sequence to see detected motifs.</p>
+            <div class="alert-info">
+                <h3>No Non-B DNA Motifs Detected</h3>
+                <p>The analyzed sequence appears to contain primarily standard B-form DNA structures.</p>
+                <p>Consider uploading a different sequence or use the example sequence to observe detected motifs.</p>
             </div>
             """, unsafe_allow_html=True)
 
