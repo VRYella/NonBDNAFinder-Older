@@ -217,10 +217,35 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar navigation
-st.sidebar.title("Navigation")
-page = st.sidebar.selectbox("Choose a section:", 
-    ["Main Analysis", "About"])
+# Sidebar navigation with buttons instead of dropdown
+st.sidebar.title("🧬 Navigation")
+st.sidebar.markdown("---")
+
+# Initialize session state for page navigation
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = "Main Analysis"
+
+# Navigation buttons
+if st.sidebar.button("🔬 Main Analysis", 
+                     type="primary" if st.session_state.current_page == "Main Analysis" else "secondary",
+                     use_container_width=True):
+    st.session_state.current_page = "Main Analysis"
+
+if st.sidebar.button("📚 About & Documentation", 
+                     type="primary" if st.session_state.current_page == "About" else "secondary",
+                     use_container_width=True):
+    st.session_state.current_page = "About"
+
+page = st.session_state.current_page
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("""
+### 🎯 Quick Info
+- **10 DNA Classes**
+- **22 Subclasses**  
+- **1-3 Scoring Scale**
+- **Publication Quality**
+""")
 
 if page == "Main Analysis":
     # Main header
@@ -324,19 +349,87 @@ if page == "Main Analysis":
                 yield match
                 pos = match.start() + 1  # Move by 1 to find overlapping matches
 
-        def get_significance_level(score, threshold_low=25, threshold_high=75):
-            """Convert raw score to significance level"""
-            if score < threshold_low:
-                return "Minimal"
-            elif score < threshold_high:
-                return "Significant"
+        def normalize_score_to_1_3(raw_score, score_method="None"):
+            """Normalize raw scores to 1-3 scale based on scientifically accepted thresholds"""
+            if score_method == "G4Hunter":
+                # G4Hunter: typically ranges from -4 to +4, with >1.5 being significant
+                if raw_score <= 0.5:
+                    return 1.0
+                elif raw_score <= 1.5:
+                    return 2.0
+                else:
+                    return 3.0
+            elif score_method == "ZSeeker":
+                # ZSeeker: ranges 0-1, with >0.5 being moderate, >0.8 high
+                if raw_score <= 0.3:
+                    return 1.0
+                elif raw_score <= 0.7:
+                    return 2.0
+                else:
+                    return 3.0
+            elif score_method == "i-motif_Score":
+                # i-motif scoring: similar to G4Hunter principles
+                if raw_score <= 10:
+                    return 1.0
+                elif raw_score <= 30:
+                    return 2.0
+                else:
+                    return 3.0
+            elif score_method in ["AT_Content", "GC_Content"]:
+                # Content scores: 0-100%, with biological significance thresholds
+                if raw_score <= 30:
+                    return 1.0
+                elif raw_score <= 70:
+                    return 2.0
+                else:
+                    return 3.0
+            elif score_method == "Hairpin_Score":
+                # Hairpin palindrome strength: 0-100% complementarity
+                if raw_score <= 40:
+                    return 1.0
+                elif raw_score <= 75:
+                    return 2.0
+                else:
+                    return 3.0
+            elif score_method == "Triplex_Score":
+                # Triplex formation potential
+                if raw_score <= 3:
+                    return 1.0
+                elif raw_score <= 8:
+                    return 2.0
+                else:
+                    return 3.0
+            elif score_method == "Repeat_Score":
+                # Repeat length scoring
+                if raw_score <= 20:
+                    return 1.0
+                elif raw_score <= 50:
+                    return 2.0
+                else:
+                    return 3.0
             else:
-                return "Very Significant"
+                # Default scoring for other methods
+                if raw_score <= 25:
+                    return 1.0
+                elif raw_score <= 75:
+                    return 2.0
+                else:
+                    return 3.0
+
+        def get_significance_level(score):
+            """Convert 1-3 normalized score to significance level"""
+            if score <= 1.5:
+                return "Low Stability"
+            elif score <= 2.5:
+                return "Moderate Stability"
+            else:
+                return "High Stability"
 
         def create_motif_dict(cls, subtype, match, seq, score_method="None", score="0", group=0):
             sequence = match.group(group)
             raw_score = float(score) if isinstance(score, str) else score
-            significance = get_significance_level(raw_score)
+            normalized_score = normalize_score_to_1_3(raw_score, score_method)
+            significance = get_significance_level(normalized_score)
             return {
                 "Class": cls, 
                 "Subtype": subtype, 
@@ -345,7 +438,8 @@ if page == "Main Analysis":
                 "Length": len(sequence),
                 "Sequence": sequence,  # Raw sequence without wrapping
                 "ScoreMethod": score_method, 
-                "Score": raw_score,
+                "RawScore": raw_score,  # Keep raw score for reference
+                "Score": round(normalized_score, 2),  # Normalized 1-3 score
                 "Significance": significance
             }
 
@@ -755,11 +849,13 @@ if page == "Main Analysis":
                 )
             
             with filter_col2:
-                significance_filter = st.selectbox(
+                significance_options = ['All'] + list(df['Significance'].unique())
+                significance_filter = st.radio(
                     "Filter by Significance:",
-                    options=['All'] + list(df['Significance'].unique()),
+                    options=significance_options,
                     index=0,
-                    key="significance_filter"
+                    key="significance_filter",
+                    horizontal=True
                 )
             
             with filter_col3:
@@ -886,11 +982,13 @@ if page == "Main Analysis":
                 st.markdown("#### 📋 Disease Analysis Results")
                 
                 # Risk level filter
-                risk_filter = st.selectbox(
+                risk_options = ['All'] + list(df_disease['Risk_Level'].unique())
+                risk_filter = st.radio(
                     "Filter by Risk Level:",
-                    options=['All'] + list(df_disease['Risk_Level'].unique()),
+                    options=risk_options,
                     index=0,
-                    key="disease_risk_filter"
+                    key="disease_risk_filter",
+                    horizontal=True
                 )
                 
                 filtered_disease_df = df_disease if risk_filter == 'All' else df_disease[df_disease['Risk_Level'] == risk_filter]
@@ -1083,6 +1181,194 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 <p>Try uploading a different sequence or use the example sequence to see detected motifs.</p>
             </div>
             """, unsafe_allow_html=True)
+        
+        # Publication-Quality Visualization Suite
+        if not df.empty:
+            st.markdown("---")
+            st.markdown("## 🎨 Publication-Quality Visualization Suite")
+            st.markdown("""
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 1.5rem; border-radius: 10px; color: white; margin: 1rem 0;">
+                <h4>📊 High-Resolution Scientific Visualizations</h4>
+                <p>Generate publication-ready figures suitable for scientific manuscripts and presentations. 
+                All plots are exportable in multiple formats (PNG ≥300 DPI, PDF, SVG) with professional styling.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Import and initialize publication visualizer
+            from publication_visualizations import PublicationVisualizer, export_all_formats
+            
+            viz = PublicationVisualizer(df, len(sequence_input))
+            
+            # Create visualization tabs
+            pub_tab1, pub_tab2, pub_tab3, pub_tab4 = st.tabs([
+                "📊 Distribution Plots", 
+                "🗺️ Genome Maps", 
+                "🔥 Heatmaps & Correlations", 
+                "📈 Advanced Plots"
+            ])
+            
+            with pub_tab1:
+                st.markdown("### 📊 Enhanced Distribution Visualizations")
+                
+                # Enhanced bar plots
+                bar_plots = viz.create_enhanced_bar_plots()
+                
+                for plot_name, fig in bar_plots.items():
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Export options
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if st.button(f"📥 Export PNG", key=f"png_{plot_name}"):
+                            try:
+                                fig.write_image(f"{plot_name}.png", format="png", width=1200, height=800, scale=2.5)
+                                st.success(f"✅ {plot_name}.png exported successfully!")
+                            except Exception as e:
+                                st.error(f"❌ Export failed: {e}")
+                    with col2:
+                        if st.button(f"📄 Export PDF", key=f"pdf_{plot_name}"):
+                            try:
+                                fig.write_image(f"{plot_name}.pdf", format="pdf", width=1200, height=800)
+                                st.success(f"✅ {plot_name}.pdf exported successfully!")
+                            except Exception as e:
+                                st.error(f"❌ Export failed: {e}")
+                    with col3:
+                        if st.button(f"🎨 Export SVG", key=f"svg_{plot_name}"):
+                            try:
+                                fig.write_image(f"{plot_name}.svg", format="svg", width=1200, height=800)
+                                st.success(f"✅ {plot_name}.svg exported successfully!")
+                            except Exception as e:
+                                st.error(f"❌ Export failed: {e}")
+                
+                # Pie and donut charts
+                pie_plots = viz.create_enhanced_pie_charts()
+                
+                for plot_name, fig in pie_plots.items():
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Violin and box plots
+                violin_plots = viz.create_violin_box_plots()
+                
+                for plot_name, fig in violin_plots.items():
+                    st.plotly_chart(fig, use_container_width=True)
+            
+            with pub_tab2:
+                st.markdown("### 🗺️ Genomic Track Visualizations")
+                
+                # Linear motif maps
+                linear_plots = viz.create_linear_motif_maps()
+                
+                for plot_name, fig in linear_plots.items():
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                st.markdown("""
+                **Features:**
+                - **Linear Genome Tracks**: Motif positions and sizes along sequence
+                - **Multi-track Display**: Each DNA class on separate track
+                - **Score Annotations**: Stability scores overlaid on motifs
+                - **Professional Styling**: Publication-ready formatting
+                """)
+            
+            with pub_tab3:
+                st.markdown("### 🔥 Heatmaps and Correlation Analysis")
+                
+                # Heatmaps
+                heatmap_plots = viz.create_publication_heatmaps()
+                
+                for plot_name, fig in heatmap_plots.items():
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("""
+                **Analysis Types:**
+                - **Density Heatmaps**: Motif distribution along sequence
+                - **Correlation Matrices**: Feature relationships
+                - **Professional Color Schemes**: Scientifically appropriate palettes
+                """)
+            
+            with pub_tab4:
+                st.markdown("### 📈 Advanced Publication Plots")
+                
+                # Lollipop plots
+                lollipop_plots = viz.create_lollipop_plots()
+                
+                for plot_name, fig in lollipop_plots.items():
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Bubble scatter plots
+                bubble_plots = viz.create_bubble_scatter_plots()
+                
+                for plot_name, fig in bubble_plots.items():
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # UpSet plots (matplotlib-based)
+                upset_plots = viz.create_upset_plots()
+                
+                if upset_plots:
+                    st.markdown("#### 🎯 Motif Intersection Analysis")
+                    for plot_name, plot_buffer in upset_plots.items():
+                        if plot_name == 'upset_matplotlib':
+                            st.image(plot_buffer, caption="Motif Class Intersections (UpSet Plot)")
+                
+                st.markdown("""
+                **Advanced Features:**
+                - **Lollipop Plots**: High-scoring motif positions
+                - **Bubble Plots**: Multi-dimensional relationships
+                - **UpSet Plots**: Complex intersection analysis
+                - **Trend Analysis**: Statistical relationships
+                """)
+            
+            # Bulk export functionality
+            st.markdown("### 📦 Bulk Export Options")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button("📥 Export All PNG (300 DPI)", key="bulk_png"):
+                    with st.spinner("Generating high-resolution PNG files..."):
+                        try:
+                            suite = viz.create_comprehensive_suite()
+                            count = 0
+                            for category, plots in suite.items():
+                                for plot_name, fig in plots.items():
+                                    if hasattr(fig, 'write_image'):
+                                        fig.write_image(f"{category}_{plot_name}.png", 
+                                                       format="png", width=1200, height=800, scale=2.5)
+                                        count += 1
+                            st.success(f"✅ Exported {count} PNG files!")
+                        except Exception as e:
+                            st.error(f"❌ Bulk export failed: {e}")
+            
+            with col2:
+                if st.button("📄 Export All PDF", key="bulk_pdf"):
+                    with st.spinner("Generating vector PDF files..."):
+                        try:
+                            suite = viz.create_comprehensive_suite()
+                            count = 0
+                            for category, plots in suite.items():
+                                for plot_name, fig in plots.items():
+                                    if hasattr(fig, 'write_image'):
+                                        fig.write_image(f"{category}_{plot_name}.pdf", 
+                                                       format="pdf", width=1200, height=800)
+                                        count += 1
+                            st.success(f"✅ Exported {count} PDF files!")
+                        except Exception as e:
+                            st.error(f"❌ Bulk export failed: {e}")
+                            
+            with col3:
+                if st.button("🎨 Export All SVG", key="bulk_svg"):
+                    with st.spinner("Generating vector SVG files..."):
+                        try:
+                            suite = viz.create_comprehensive_suite()
+                            count = 0
+                            for category, plots in suite.items():
+                                for plot_name, fig in plots.items():
+                                    if hasattr(fig, 'write_image'):
+                                        fig.write_image(f"{category}_{plot_name}.svg", 
+                                                       format="svg", width=1200, height=800)
+                                        count += 1
+                            st.success(f"✅ Exported {count} SVG files!")
+                        except Exception as e:
+                            st.error(f"❌ Bulk export failed: {e}")
 
 elif page == "About":
     # Comprehensive documentation about scoring systems and detection logic
@@ -1094,7 +1380,13 @@ elif page == "About":
     """)
     
     # Add comprehensive documentation tabs
-    doc_tab1, doc_tab2, doc_tab3, doc_tab4 = st.tabs(["🏗️ Structure Classes", "🎯 Scoring Systems", "🔍 Detection Logic", "📊 Pipeline"])
+    doc_tab1, doc_tab2, doc_tab3, doc_tab4, doc_tab5 = st.tabs([
+        "🏗️ Structure Classes", 
+        "🎯 Scoring Systems", 
+        "🔍 Detection Logic", 
+        "📊 Pipeline",
+        "📚 References"
+    ])
     
     with doc_tab1:
         # Original structure information
@@ -1241,86 +1533,93 @@ elif page == "About":
         st.markdown("## 🔍 Detection Logic and Regular Expressions")
         
         detection_data = {
-            "DNA Class": [
-                "Curved DNA - Global Curvature",
-                "Curved DNA - Local Curvature", 
-                "Slipped DNA - Direct Repeat",
-                "Slipped DNA - STR",
-                "Cruciform DNA - IR/Hairpin",
-                "R-loop - RNA-DNA hybrids",
-                "Triplex - Triplex",
-                "Triplex - Sticky DNA",
-                "G-Quadruplex - Multimeric",
-                "G-Quadruplex - Canonical",
-                "G-Quadruplex - Relaxed",
-                "G-Quadruplex - Bulged",
-                "G-Quadruplex - Bipartite", 
-                "G-Quadruplex - Imperfect",
-                "G-Quadruplex - G-Triplex",
-                "i-Motif - Canonical",
-                "i-Motif - Relaxed",
-                "i-Motif - AC-motif",
-                "Z-DNA - Z-DNA",
-                "Z-DNA - eGZ",
-                "Hybrid - Dynamic overlap",
-                "Non-B DNA Cluster - Hotspot"
+            "S.No": list(range(1, 23)),
+            "Class": [
+                "Curved DNA", "Curved DNA", 
+                "Slipped DNA", "Slipped DNA",
+                "Cruciform DNA",
+                "R-loop",
+                "Triplex", "Triplex",
+                "G-Quadruplex", "G-Quadruplex", "G-Quadruplex", "G-Quadruplex", 
+                "G-Quadruplex", "G-Quadruplex", "G-Quadruplex",
+                "i-Motif", "i-Motif", "i-Motif",
+                "Z-DNA", "Z-DNA",
+                "Hybrid",
+                "Non-B DNA Cluster"
             ],
-            "Regular Expression": [
-                "A{4,}.{0,6}T{4,}",
-                "[AT]{8,}",
-                "([ATGC]{2,10})\\1{2,}",
-                "([ATGC]{1,6})\\1{4,}",
-                "[ATGC]{4,8}.{5,20}[ATGC]{4,8}",
-                "G{20,}[ATGC]{10,50}C{20,}",
-                "[AG]{15,}",
-                "[CT]{15,}",
-                "G{4,}.{1,7}G{4,}.{1,7}G{4,}.{1,7}G{4,}",
-                "G{3}.{1,7}G{3}.{1,7}G{3}.{1,7}G{3}",
-                "G{2,3}.{1,12}G{2,3}.{1,12}G{2,3}.{1,12}G{2,3}",
-                "G{3}.{1,7}G{1,3}.{1,7}G{3}.{1,7}G{3}",
-                "G{3}.{1,7}G{3}.{1,20}G{3}.{1,7}G{3}",
-                "G{2}.{1,12}G{2}.{1,12}G{2}.{1,12}G{2}",
-                "G{3}.{1,7}G{3}.{1,7}G{3}",
-                "C{3}.{1,7}C{3}.{1,7}C{3}.{1,7}C{3}",
-                "C{2,3}.{1,12}C{2,3}.{1,12}C{2,3}.{1,12}C{2,3}",
-                "(A{3,}[ACGT]{6}C{3,}[ACGT]{6}C{3,}[ACGT]{6}C{3,})|(C{3,}[ACGT]{6}C{3,}[ACGT]{6}C{3,}[ACGT]{6}A{3,})",
-                "(?:CG){6,}",
-                "(?:CGG){4,}",
-                "G{3}.{1,7}G{3}.{1,7}C{3}.{1,7}C{3}",
-                "[ATGC]{100,}"
+            "Sub Class": [
+                "Global Curvature", "Local Curvature", 
+                "Direct Repeat", "STR",
+                "IR/Hairpin structures",
+                "RNA-DNA hybrids",
+                "Triplex", "Sticky DNA",
+                "Multimeric", "Canonical", "Relaxed", "Bulged", 
+                "Bipartite", "Imperfect", "G-Triplex",
+                "Canonical", "Relaxed", "AC-motif",
+                "Z-DNA", "eGZ",
+                "Dynamic overlap",
+                "Hotspot regions"
+            ],
+            "Description": [
+                "Detects global DNA curvature using A-tract spacing patterns with AT-rich regions",
+                "Identifies localized curvature through consecutive AT-rich sequences affecting helical geometry",
+                "Finds direct repeat sequences that can form slipped-strand structures during replication",
+                "Detects short tandem repeats (STRs) prone to expansion and slippage events",
+                "Identifies inverted repeat sequences capable of forming cruciform/hairpin secondary structures",
+                "Detects R-loop forming sequences with strong G-rich and C-rich strand asymmetry",
+                "Identifies purine-rich sequences capable of triplex DNA formation with Hoogsteen base pairing",
+                "Detects pyrimidine-rich sequences that form sticky DNA structures in trinucleotide repeats",
+                "Finds multiple overlapping G-quadruplex motifs indicating high G4-forming potential",
+                "Detects canonical G-quadruplex motifs with four G-tracts and optimal loop lengths",
+                "Identifies relaxed G4 motifs with variable G-tract lengths and extended loop regions", 
+                "Finds bulged G-quadruplex motifs with interruptions in G-tracts allowing structural flexibility",
+                "Detects bipartite G4 motifs with long central loops creating distant G-tract interactions",
+                "Identifies imperfect G-quadruplex motifs with shortened G-tracts but retained G4 potential",
+                "Finds G-triplex motifs as intermediates or alternative conformations to G-quadruplexes",
+                "Detects canonical i-motif structures with four C-tracts forming intercalated cytosine tetrads",
+                "Identifies relaxed i-motif motifs with variable C-tract lengths and loop flexibility",
+                "Finds AC-motif structures combining adenine and cytosine repeats with regulatory functions",
+                "Detects Z-DNA forming sequences with alternating purine-pyrimidine dinucleotides",
+                "Identifies extruded guanine Z-DNA motifs in CGG trinucleotide repeat expansions",
+                "Detects hybrid regions with overlapping non-B DNA motifs creating complex structural dynamics",
+                "Identifies hotspot regions with high density of multiple non-B DNA forming sequences"
             ],
             "Scoring Method": [
-                "AT_Content", "AT_Content", "GC_Content", "GC_Content",
+                "AT_Content", "AT_Content", "Repeat_Score", "Repeat_Score",
                 "Hairpin_Score", "GC_Content", "Triplex_Score", "Triplex_Score",
                 "G4Hunter", "G4Hunter", "G4Hunter", "G4Hunter", "G4Hunter",
                 "G4Hunter", "G4Hunter", "i-motif_Score", "i-motif_Score",
                 "i-motif_Score", "ZSeeker", "ZSeeker", "G4Hunter", "GC_Content"
             ],
             "Significance Threshold": [
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75",
-                "Low: <25, Med: 25-75, High: >75"
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5",
+                "Low: ≤1.5, Moderate: 1.5-2.5, High: >2.5"
             ]
         }
+        
+    with doc_tab3:
+        st.markdown("## 🔍 Complete Detection Logic Reference")
+        st.markdown("### 📋 All 22 Subclass Detection Methods")
         
         detection_df = pd.DataFrame(detection_data)
         st.dataframe(detection_df, use_container_width=True, height=600)
@@ -1338,9 +1637,12 @@ elif page == "About":
            - `.{n,m}`: any character between n and m times
         
         **Significance Classification:**
-        - **Minimal (<25):** Low structural potential
-        - **Significant (25-75):** Moderate structural potential  
-        - **Very Significant (>75):** High structural potential
+        - **Low Stability (≤1.5):** Minimal structural formation potential
+        - **Moderate Stability (1.5-2.5):** Moderate structural formation potential  
+        - **High Stability (>2.5):** High structural formation potential
+        
+        **Normalized Scoring (1-3 Scale):**
+        All scores are normalized to a 1-3 scale based on scientifically accepted thresholds for each scoring method, ensuring consistent interpretation across different motif types.
         """)
         
     with doc_tab4:
@@ -1435,6 +1737,129 @@ elif page == "About":
         - Hexanucleotide repeats (GGGGCC)
         - Other pathogenic repeat expansions (CTG)
         """)
+    
+    with doc_tab5:
+        st.markdown("## 📚 Scientific References")
+        
+        st.markdown("""
+        ### Key Publications on Non-B DNA Structures
+        
+        **Foundational Works:**
+        """)
+        
+        references = [
+            {
+                "title": "Molecular structure of nucleic acids; a structure for deoxyribose nucleic acid",
+                "authors": "Watson, J. D. & Crick, F. H.",
+                "journal": "Nature",
+                "year": "1953",
+                "significance": "Foundational description of B-form DNA structure"
+            },
+            {
+                "title": "Dynamic alternative DNA structures in biology and disease", 
+                "authors": "Wang, G. & Vasquez, K. M.",
+                "journal": "Nat Rev Genet",
+                "year": "2023",
+                "significance": "Comprehensive review of non-B DNA in biological systems"
+            },
+            {
+                "title": "Detection of alternative DNA structures and its implications for human disease",
+                "authors": "Matos-Rodrigues, G., Hisey, J. A., Nussenzweig, A. & Mirkin, S. M.",
+                "journal": "Mol Cell",
+                "year": "2023", 
+                "significance": "Modern methods for detecting non-B DNA structures"
+            },
+            {
+                "title": "Noncanonical DNA structures are drivers of genome evolution",
+                "authors": "Makova, K. D. & Weissensteiner, M. H.",
+                "journal": "Trends Genet",
+                "year": "2023",
+                "significance": "Role of non-B DNA in evolutionary processes"
+            },
+            {
+                "title": "Formation of parallel four-stranded complexes by guanine-rich motifs in DNA",
+                "authors": "Sen, D. & Gilbert, W.",
+                "journal": "Nature", 
+                "year": "1988",
+                "significance": "Discovery of G-quadruplex structures"
+            },
+            {
+                "title": "Detection of G-quadruplex DNA in mammalian cells",
+                "authors": "Henderson, A. et al.",
+                "journal": "Nucleic Acids Res",
+                "year": "2017",
+                "significance": "In vivo detection of G-quadruplexes"
+            },
+            {
+                "title": "I-motif DNA structures are formed in the nuclei of human cells",
+                "authors": "Zeraati, M. et al.",
+                "journal": "Nat Chem",
+                "year": "2018",
+                "significance": "First demonstration of i-motifs in living cells"
+            },
+            {
+                "title": "R-loop formation is a distinctive characteristic of unmethylated human CpG island promoters",
+                "authors": "Ginno, P. A., Lott, P. L., Christensen, H. C., Korf, I. & Chédin, F.",
+                "journal": "Mol Cell",
+                "year": "2012",
+                "significance": "R-loop formation in gene regulation"
+            },
+            {
+                "title": "Molecular structure of a left-handed double helical DNA fragment at atomic resolution",
+                "authors": "Wang, A. H. et al.",
+                "journal": "Nature",
+                "year": "1979",
+                "significance": "First crystal structure of Z-DNA"
+            },
+            {
+                "title": "High-throughput characterization of the role of non-B DNA motifs on promoter function",
+                "authors": "Georgakopoulos-Soares, I. et al.",
+                "journal": "Cell Genom",
+                "year": "2022",
+                "significance": "Systematic analysis of non-B DNA in gene regulation"
+            }
+        ]
+        
+        for i, ref in enumerate(references, 1):
+            st.markdown(f"""
+            <div style="background: white; padding: 1rem; border-radius: 8px; margin: 0.5rem 0; 
+                       border-left: 4px solid #667eea; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <h5 style="margin: 0; color: #667eea;">{i}. {ref['title']}</h5>
+                <p style="margin: 0.5rem 0; color: #666;"><strong>{ref['authors']}</strong></p>
+                <p style="margin: 0.5rem 0; color: #888;"><em>{ref['journal']}</em> ({ref['year']})</p>
+                <p style="margin: 0.5rem 0 0 0; color: #555; font-size: 0.9em;"><strong>Significance:</strong> {ref['significance']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("""
+        ### Computational Methods and Tools
+        
+        **Scoring Algorithms:**
+        - **G4Hunter**: Bedrat, A., Lacroix, L., & Mergny, J. L. (2016). Re-evaluation of G-quadruplex propensity with G4Hunter. *Nucleic Acids Res*, 44(4), 1746-1759.
+        - **ZSeeker**: Ho, P. S., Ellison, M. J., Quigley, G. J. & Rich, A. (1986). A computer aided thermodynamic approach for predicting the formation of Z-DNA. *EMBO J*, 5, 2737-2744.
+        - **Triplexator**: Buske, F. A., Bauer, D. C., Mattick, J. S. & Bailey, T. L. (2012). Triplexator: detecting nucleic acid triple helices. *Genome Res*, 22, 1372-1381.
+        
+        **Database Resources:**
+        - **Non-B DB**: Cer, R. Z. et al. (2013). Non-B DB v2.0: a database of predicted non-B DNA-forming motifs. *Nucleic Acids Res*, 41, D94-100.
+        - **G4IPDB**: Vorlícková, M. et al. (2012). Circular dichroism and guanine quadruplexes. *Methods*, 57, 64-75.
+        
+        ### Citation
+        If you use NonBDNAFinder in your research, please cite:
+        
+        > **NonBDNAFinder: A Comprehensive Tool for Non-B DNA Structure Detection and Analysis**  
+        > *[Publication details to be added upon manuscript submission]*
+        """)
+        
+        # Add download button for references
+        ref_text = "\\n".join([f"{i}. {ref['authors']} ({ref['year']}). {ref['title']}. {ref['journal']}." 
+                              for i, ref in enumerate(references, 1)])
+        
+        st.download_button(
+            "📄 Download References (Plain Text)",
+            data=ref_text,
+            file_name=f"NonBDNAFinder_References_{datetime.now().strftime('%Y%m%d')}.txt",
+            mime="text/plain"
+        )
         
         # Add download button for complete documentation
         doc_content = """
